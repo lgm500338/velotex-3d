@@ -8,7 +8,7 @@ export interface SupercarRig {
   taillightMat: THREE.MeshStandardMaterial;
   nitroFlames: THREE.Mesh[];
   paintMaterial: THREE.MeshPhysicalMaterial;
-  accentMaterial: THREE.MeshStandardMaterial;
+  accentMaterial: THREE.MeshPhysicalMaterial;
   cockpitGroup: THREE.Group | null;
   steeringWheelGroup: THREE.Group | null;
   shiftLeds: THREE.MeshStandardMaterial[];
@@ -25,43 +25,63 @@ export function buildSupercarRig(
   options: {
     includeCockpit: boolean;
     dashTexture?: THREE.Texture;
+    envMap?: THREE.Texture | null;
+    isMobile?: boolean;
   },
 ): SupercarRig {
   const group = new THREE.Group();
+  const envMap = options.envMap ?? null;
 
-  // Glossy automotive clearcoat paint
+  // Glossy metallic automotive clearcoat paint (deep saturated basecoat + crisp clearcoat shine)
   const paintMaterial = new THREE.MeshPhysicalMaterial({
     color: primaryHex,
-    metalness: 0.72,
-    roughness: 0.22,
+    metalness: 0.45,
+    roughness: 0.3,
     clearcoat: 1.0,
-    clearcoatRoughness: 0.08,
+    clearcoatRoughness: 0.04,
+    ior: 1.52,
+    reflectivity: 1.0,
+    envMap,
+    envMapIntensity: 1.05,
   });
 
-  const accentMaterial = new THREE.MeshStandardMaterial({
+  const accentMaterial = new THREE.MeshPhysicalMaterial({
     color: accentHex,
-    metalness: 0.65,
-    roughness: 0.28,
+    metalness: 0.45,
+    roughness: 0.3,
+    clearcoat: 1.0,
+    clearcoatRoughness: 0.045,
+    ior: 1.52,
+    reflectivity: 1.0,
+    envMap,
+    envMapIntensity: 1.0,
   });
 
   const carbonMat = new THREE.MeshStandardMaterial({
     color: 0x111520,
-    metalness: 0.28,
-    roughness: 0.62,
+    metalness: 0.3,
+    roughness: 0.48,
+    envMap,
+    envMapIntensity: 0.85,
   });
 
   const chromeMat = new THREE.MeshStandardMaterial({
     color: 0xe2e8f0,
-    metalness: 0.96,
-    roughness: 0.14,
+    metalness: 0.98,
+    roughness: 0.08,
+    envMap,
+    envMapIntensity: 2.0,
   });
 
   const glassMat = new THREE.MeshPhysicalMaterial({
-    color: 0x0b1324,
-    metalness: 0.2,
-    roughness: 0.08,
+    color: 0x07101f,
+    metalness: 0.18,
+    roughness: 0.04,
     clearcoat: 1.0,
-    clearcoatRoughness: 0.05,
+    clearcoatRoughness: 0.02,
+    reflectivity: 1.0,
+    envMap,
+    envMapIntensity: 2.2,
   });
 
   const tireMat = new THREE.MeshStandardMaterial({
@@ -71,9 +91,11 @@ export function buildSupercarRig(
   });
 
   const rimMat = new THREE.MeshStandardMaterial({
-    color: 0xcbd5e1,
-    metalness: 0.92,
-    roughness: 0.18,
+    color: 0xdbe4ef,
+    metalness: 0.94,
+    roughness: 0.14,
+    envMap,
+    envMapIntensity: 1.9,
   });
 
   const taillightMat = new THREE.MeshStandardMaterial({
@@ -120,9 +142,9 @@ export function buildSupercarRig(
   const bodyGeo = new THREE.ExtrudeGeometry(bodyProfile, {
     depth: 1.76,
     bevelEnabled: true,
-    bevelThickness: 0.14,
-    bevelSize: 0.08,
-    bevelSegments: 3,
+    bevelThickness: 0.15,
+    bevelSize: 0.085,
+    bevelSegments: options.isMobile ? 2 : 4,
   });
   // Rotate so profile X maps to Z and extrusion depth maps to X, centered on X=0
   bodyGeo.translate(0, 0, -0.88);
@@ -181,9 +203,9 @@ export function buildSupercarRig(
   const cabinGeo = new THREE.ExtrudeGeometry(cabinProfile, {
     depth: 1.24,
     bevelEnabled: true,
-    bevelThickness: 0.12,
-    bevelSize: 0.06,
-    bevelSegments: 2,
+    bevelThickness: 0.13,
+    bevelSize: 0.065,
+    bevelSegments: options.isMobile ? 2 : 4,
   });
   cabinGeo.translate(0, 0, -0.62);
   cabinGeo.rotateY(-Math.PI / 2);

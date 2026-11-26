@@ -197,11 +197,40 @@ export class RacingEngine {
 
       this.scene = new THREE.Scene();
 
-      // Mandatory Studio Environment Reflection (RoomEnvironment via PMREMGenerator)
+      // Pre-baked high-contrast automotive studio environment map (baked once = zero per-frame mobile cost)
       const pmremGenerator = new THREE.PMREMGenerator(this.renderer);
       const envScene = new RoomEnvironment();
-      this.envRenderTarget = pmremGenerator.fromScene(envScene, 0.04);
+      const envTempDisposables: { dispose: () => void }[] = [];
+
+      // Elongated overhead showroom softbox strips & warm/cool horizon light bands for crisp car paint reflections
+      const stripGeo = new THREE.BoxGeometry(16, 0.35, 3.2);
+      const topStripMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(3.2, 3.6, 4.2) });
+      const sideStripMatCool = new THREE.MeshBasicMaterial({ color: new THREE.Color(2.4, 4.6, 7.2) });
+      const sideStripMatWarm = new THREE.MeshBasicMaterial({ color: new THREE.Color(6.2, 4.4, 2.6) });
+      envTempDisposables.push(stripGeo, topStripMat, sideStripMatCool, sideStripMatWarm);
+
+      const overhead1 = new THREE.Mesh(stripGeo, topStripMat);
+      overhead1.position.set(0, 12.5, -5.5);
+      envScene.add(overhead1);
+
+      const overhead2 = new THREE.Mesh(stripGeo, topStripMat);
+      overhead2.position.set(0, 12.5, 5.5);
+      envScene.add(overhead2);
+
+      const leftHorizon = new THREE.Mesh(stripGeo, sideStripMatCool);
+      leftHorizon.position.set(-14, 3.2, 0);
+      leftHorizon.rotation.y = Math.PI / 2;
+      envScene.add(leftHorizon);
+
+      const rightHorizon = new THREE.Mesh(stripGeo, sideStripMatWarm);
+      rightHorizon.position.set(14, 3.2, 0);
+      rightHorizon.rotation.y = Math.PI / 2;
+      envScene.add(rightHorizon);
+
+      this.envRenderTarget = pmremGenerator.fromScene(envScene, 0.03);
       this.scene.environment = this.envRenderTarget.texture;
+      this.scene.environmentIntensity = 0.6;
+      for (const d of envTempDisposables) d.dispose();
       pmremGenerator.dispose();
       envScene.dispose();
 
@@ -371,9 +400,13 @@ export class RacingEngine {
       [-9, 2.2], // Player starts P6 so overtaking creates instant excitement!
     ];
 
+    const carEnvMap = this.envRenderTarget?.texture ?? null;
+
     RIVAL_PROFILES.forEach((profile, idx) => {
       const rig = buildSupercarRig(profile.colorHex, 0xffffff, this.shadowTexture, {
         includeCockpit: false,
+        envMap: carEnvMap,
+        isMobile: this.isCoarsePointer,
       });
       this.scene.add(rig.group);
       const [sPos, latPos] = gridSlots[idx];
@@ -404,6 +437,8 @@ export class RacingEngine {
     const playerRig = buildSupercarRig(livery.primaryHex, livery.accentHex, this.shadowTexture, {
       includeCockpit: true,
       dashTexture: this.dashDisplay.texture,
+      envMap: carEnvMap,
+      isMobile: this.isCoarsePointer,
     });
     this.scene.add(playerRig.group);
 

@@ -302,6 +302,197 @@ export function createCheckeredTexture(anisotropy: number): THREE.CanvasTexture 
   return configureTexture(new THREE.CanvasTexture(canvas), anisotropy, 2, 1);
 }
 
+export interface BuildingTextureSet {
+  albedo: THREE.CanvasTexture;
+  emissive: THREE.CanvasTexture;
+}
+
+/**
+ * Generates realistic architectural concrete & multi-story glass window facade textures
+ * (albedo + warm sunset lit-window emissive map) for the City Grand Prix track.
+ */
+export function createBuildingFacadeTextures(
+  variant: 'concrete_office' | 'glass_tower',
+  anisotropy: number,
+): BuildingTextureSet {
+  const w = 512;
+  const h = 512;
+  const albedoCanvas = document.createElement('canvas');
+  albedoCanvas.width = w;
+  albedoCanvas.height = h;
+  const ctx = albedoCanvas.getContext('2d')!;
+
+  const emisCanvas = document.createElement('canvas');
+  emisCanvas.width = w;
+  emisCanvas.height = h;
+  const ectx = emisCanvas.getContext('2d')!;
+
+  ectx.fillStyle = '#000000';
+  ectx.fillRect(0, 0, w, h);
+
+  // Base concrete / architectural precast wall tone
+  ctx.fillStyle = variant === 'concrete_office' ? '#6c727f' : '#4a5568';
+  ctx.fillRect(0, 0, w, h);
+
+  // Concrete surface speckle, weathering & panel seams
+  for (let i = 0; i < 4200; i++) {
+    const px = Math.random() * w;
+    const py = Math.random() * h;
+    ctx.fillStyle =
+      i % 2 === 0 ? 'rgba(255,255,255,0.055)' : 'rgba(15,23,42,0.08)';
+    ctx.fillRect(px, py, 2 + (i % 3), 2 + (i % 2));
+  }
+
+  // Subtle horizontal concrete slab joints
+  const floors = 8;
+  const floorH = h / floors;
+  const cols = variant === 'concrete_office' ? 6 : 8;
+  const colW = w / cols;
+
+  for (let r = 0; r < floors; r++) {
+    const y0 = r * floorH;
+
+    // Concrete floor spandrel & recessed shadow ledge
+    ctx.fillStyle = variant === 'concrete_office' ? '#585e6b' : '#334155';
+    ctx.fillRect(0, y0, w, 10);
+    ctx.fillStyle = 'rgba(255, 240, 220, 0.14)';
+    ctx.fillRect(0, y0 + 10, w, 3);
+    ctx.fillStyle = 'rgba(10, 14, 24, 0.28)';
+    ctx.fillRect(0, y0 + floorH - 4, w, 4);
+
+    for (let c = 0; c < cols; c++) {
+      const x0 = c * colW;
+      const padX = variant === 'concrete_office' ? 10 : 5;
+      const padTop = 15;
+      const winW = colW - padX * 2;
+      const winH = floorH - 22;
+
+      // Concrete vertical pillar highlight
+      ctx.fillStyle = 'rgba(255,255,255,0.06)';
+      ctx.fillRect(x0, y0, 3, floorH);
+
+      // Dark window frame recess
+      ctx.fillStyle = '#141923';
+      ctx.fillRect(x0 + padX - 2, y0 + padTop - 2, winW + 4, winH + 4);
+
+      // Deterministic pseudo-random per window so rooms vary realistically
+      const hash = ((r * 31 + c * 17 + (variant === 'glass_tower' ? 7 : 0)) * 2654435761) >>> 0;
+      const roll = (hash % 100) / 100;
+
+      if (roll < 0.34) {
+        // Warm illuminated interior window at sunset
+        const warmGrad = ctx.createLinearGradient(0, y0 + padTop, 0, y0 + padTop + winH);
+        warmGrad.addColorStop(0, '#fde68a');
+        warmGrad.addColorStop(0.55, '#f59e0b');
+        warmGrad.addColorStop(1, '#b45309');
+        ctx.fillStyle = warmGrad;
+        ctx.fillRect(x0 + padX, y0 + padTop, winW, winH);
+
+        // Matching warm glow in emissive map
+        ectx.fillStyle = roll < 0.16 ? '#fbbf24' : '#f97316';
+        ectx.fillRect(x0 + padX + 1, y0 + padTop + 1, winW - 2, winH - 2);
+      } else if (roll < 0.45) {
+        // Cool office fluorescent lit window
+        ctx.fillStyle = '#bae6fd';
+        ctx.fillRect(x0 + padX, y0 + padTop, winW, winH);
+        ectx.fillStyle = '#7dd3fc';
+        ectx.fillRect(x0 + padX + 1, y0 + padTop + 1, winW - 2, winH - 2);
+      } else {
+        // Reflective dark sunset sky glass
+        const glassGrad = ctx.createLinearGradient(
+          x0 + padX,
+          y0 + padTop,
+          x0 + padX + winW,
+          y0 + padTop + winH,
+        );
+        glassGrad.addColorStop(0, '#1e293b');
+        glassGrad.addColorStop(0.45, '#334155');
+        glassGrad.addColorStop(0.55, '#475569');
+        glassGrad.addColorStop(1, '#0f172a');
+        ctx.fillStyle = glassGrad;
+        ctx.fillRect(x0 + padX, y0 + padTop, winW, winH);
+
+        // Subtle diagonal window reflection streak
+        ctx.fillStyle = 'rgba(251, 146, 60, 0.16)';
+        ctx.fillRect(x0 + padX + 2, y0 + padTop + 2, winW * 0.35, winH * 0.45);
+      }
+
+      // Window horizontal blinds / mullion bar
+      ctx.fillStyle = 'rgba(15, 23, 42, 0.55)';
+      ctx.fillRect(x0 + padX, y0 + padTop + winH * 0.52, winW, 2);
+      if (variant === 'glass_tower') {
+        ctx.fillRect(x0 + padX + winW * 0.5, y0 + padTop, 2, winH);
+      }
+    }
+  }
+
+  return {
+    albedo: configureTexture(new THREE.CanvasTexture(albedoCanvas), anisotropy, 1, 2),
+    emissive: configureTexture(new THREE.CanvasTexture(emisCanvas), anisotropy, 1, 2),
+  };
+}
+
+/**
+ * Generates procedural granite cliff & alpine forest/snow slope texture for nature mountains.
+ */
+export function createMountainRockTexture(anisotropy: number): THREE.CanvasTexture {
+  const canvas = document.createElement('canvas');
+  canvas.width = 512;
+  canvas.height = 512;
+  const ctx = canvas.getContext('2d')!;
+
+  // Vertical elevation gradient: lush forest base -> rugged slate rock -> sunlit snow-dusted ridge
+  const grad = ctx.createLinearGradient(0, 0, 0, 512);
+  grad.addColorStop(0.0, '#eef6fb');
+  grad.addColorStop(0.18, '#cbd5e1');
+  grad.addColorStop(0.32, '#64748b');
+  grad.addColorStop(0.62, '#4b5563');
+  grad.addColorStop(0.80, '#365314');
+  grad.addColorStop(1.0, '#274214');
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, 512, 512);
+
+  // Rugged diagonal rock strata & shadow crags
+  for (let i = 0; i < 1600; i++) {
+    const x = Math.random() * 512;
+    const y = Math.random() * 512;
+    const w = 8 + Math.random() * 28;
+    const h = 3 + Math.random() * 9;
+    if (y < 115) {
+      ctx.fillStyle = i % 2 === 0 ? 'rgba(255,255,255,0.28)' : 'rgba(148,163,184,0.22)';
+    } else if (y < 365) {
+      ctx.fillStyle = i % 2 === 0 ? 'rgba(30,41,59,0.22)' : 'rgba(203,213,225,0.12)';
+    } else {
+      ctx.fillStyle = i % 2 === 0 ? 'rgba(22,101,52,0.24)' : 'rgba(132,204,22,0.12)';
+    }
+    ctx.fillRect(x, y, w, h);
+  }
+
+  return configureTexture(new THREE.CanvasTexture(canvas), anisotropy, 2, 1);
+}
+
+/**
+ * Generates procedural tree bark texture for nature tracks.
+ */
+export function createTreeBarkTexture(anisotropy: number): THREE.CanvasTexture {
+  const canvas = document.createElement('canvas');
+  canvas.width = 256;
+  canvas.height = 256;
+  const ctx = canvas.getContext('2d')!;
+
+  ctx.fillStyle = '#5c3a21';
+  ctx.fillRect(0, 0, 256, 256);
+
+  for (let i = 0; i < 600; i++) {
+    const x = Math.random() * 256;
+    const y = Math.random() * 256;
+    ctx.fillStyle = i % 2 === 0 ? 'rgba(35, 20, 10, 0.35)' : 'rgba(146, 98, 60, 0.22)';
+    ctx.fillRect(x, y, 3 + (i % 4), 18 + (i % 24));
+  }
+
+  return configureTexture(new THREE.CanvasTexture(canvas), anisotropy, 1, 2);
+}
+
 export function createContactShadowTexture(): THREE.CanvasTexture {
   const canvas = document.createElement('canvas');
   canvas.width = 128;

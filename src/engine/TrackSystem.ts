@@ -2,8 +2,11 @@ import * as THREE from 'three';
 import { RaceConfig } from '../types/game';
 import {
   createBoostPadTexture,
+  createBuildingFacadeTextures,
   createCheckeredTexture,
+  createMountainRockTexture,
   createRoadTexture,
+  createTreeBarkTexture,
   createTunnelTexture,
 } from './ProceduralTextures';
 
@@ -285,9 +288,12 @@ export function buildTrackWorld(config: RaceConfig, maxAnisotropy: number): Buil
     }
   }
 
-  // 3. Natural Outdoor Landscape & Instanced Environment Scenery (No floating box void!)
-  if (config.theme === 'forest_canopy' || config.theme === 'timber_valley' || config.theme === 'sunset_gp') {
-    buildOutdoorTerrainAndScenery(group, spline, config, disposables);
+  // 3. Theme-specific Landscape & Instanced Environment Scenery
+  // Keep glowing tunnel tracks (cyber_tunnel, neon_grid) in their original neon atmosphere!
+  if (config.theme === 'forest_canopy' || config.theme === 'timber_valley') {
+    buildNatureMountainsAndForest(group, spline, config, maxAnisotropy, disposables);
+  } else if (config.theme === 'sunset_gp') {
+    buildCitySkylineScenery(group, spline, config, maxAnisotropy, disposables);
   } else {
     buildCyberSpaceAtmosphere(group, spline, config, disposables);
   }
@@ -523,14 +529,15 @@ function buildTunnelSegment(
   return tunnelGroup;
 }
 
-function buildOutdoorTerrainAndScenery(
+function buildNatureMountainsAndForest(
   group: THREE.Group,
   spline: TrackSpline,
   config: RaceConfig,
+  maxAnisotropy: number,
   disposables: { dispose: () => void }[],
 ): void {
-  // Extended sweeping valley terrain far below & beyond track (prevents floating in empty void)
-  const terrainGeo = new THREE.PlaneGeometry(520, config.lengthMeters + 600, 32, 90);
+  // 1. Extended sweeping green valley terrain far below & beyond track (prevents floating void)
+  const terrainGeo = new THREE.PlaneGeometry(680, config.lengthMeters + 760, 36, 96);
   terrainGeo.rotateX(-Math.PI / 2);
 
   const posAttr = terrainGeo.attributes.position;
@@ -538,23 +545,20 @@ function buildOutdoorTerrainAndScenery(
   for (let i = 0; i < posAttr.count; i++) {
     const x = posAttr.getX(i);
     const z = posAttr.getZ(i) - config.lengthMeters * 0.48;
-    const s = Math.max(-40, Math.min(config.lengthMeters + 100, -z));
+    const s = Math.max(-40, Math.min(config.lengthMeters + 120, -z));
     spline.samplePosition(s, sampleP);
     const distFromTrack = Math.abs(x - sampleP.x);
-    // Keep terrain cleanly below road near track center, rising into natural canyon hills further out
-    const hillRise = Math.max(0, distFromTrack - 18) * 0.28 + Math.sin(x * 0.045) * Math.cos(z * 0.03) * 6;
+    // Natural rolling valley floor rising steeply into alpine foothills further out
+    const hillRise =
+      Math.max(0, distFromTrack - 18) * 0.34 +
+      Math.sin(x * 0.042) * Math.cos(z * 0.028) * 7.5;
     const y = sampleP.y - 4.2 + hillRise;
     posAttr.setXYZ(i, x + sampleP.x * 0.35, y, z);
   }
   terrainGeo.computeVertexNormals();
   disposables.push(terrainGeo);
 
-  const terrainColor =
-    config.theme === 'forest_canopy'
-      ? 0x2d5a1e
-      : config.theme === 'timber_valley'
-        ? 0x3f7a18
-        : 0x3b2219;
+  const terrainColor = config.theme === 'forest_canopy' ? 0x2d5a1e : 0x3f7a18;
   const terrainMat = new THREE.MeshStandardMaterial({
     color: terrainColor,
     roughness: 0.92,
@@ -565,34 +569,34 @@ function buildOutdoorTerrainAndScenery(
   terrainMesh.receiveShadow = true;
   group.add(terrainMesh);
 
-  // Instanced Multi-Part Trees / Palms / Canyon Rocks along the track (honoring Images 4 & 5!)
-  const isForest = config.theme === 'forest_canopy' || config.theme === 'timber_valley';
-  const count = isForest ? 150 : 110;
+  // 2. Dramatic Layered Mountain Range Backdrop (Instanced faceted peaks with rock & snow texture)
+  const mountainTex = createMountainRockTexture(maxAnisotropy);
+  disposables.push(mountainTex);
 
-  // Trunk + Canopy as two coordinated InstancedMeshes with scale & color tint variation
-  const trunkGeo = new THREE.CylinderGeometry(0.45, 0.95, isForest ? 18 : 13, 8);
-  trunkGeo.translate(0, isForest ? 9 : 6.5, 0);
-  const trunkMat = new THREE.MeshStandardMaterial({
-    color: isForest ? 0x6b4226 : 0x5c4033,
-    roughness: 0.9,
+  // Sculpted asymmetric mountain peak geometry (bottom-center pivoted)
+  const peakGeo = new THREE.ConeGeometry(46, 92, 7, 4);
+  peakGeo.translate(0, 46, 0);
+  const peakPos = peakGeo.attributes.position;
+  for (let i = 0; i < peakPos.count; i++) {
+    const px = peakPos.getX(i);
+    const py = peakPos.getY(i);
+    const pz = peakPos.getZ(i);
+    // Keep summit sharp and base grounded while adding craggy ridge facets
+    const ridgeNoise = py > 4 && py < 88 ? (Math.sin(px * 0.14 + py * 0.08) * 5.2 + Math.cos(pz * 0.13) * 4.5) : 0;
+    peakPos.setXYZ(i, px + ridgeNoise * 0.55, py, pz + ridgeNoise * 0.45);
+  }
+  peakGeo.computeVertexNormals();
+
+  const mountainMat = new THREE.MeshStandardMaterial({
+    map: mountainTex,
+    roughness: 0.92,
     metalness: 0.04,
+    flatShading: true,
   });
+  disposables.push(peakGeo, mountainMat);
 
-  const canopyGeo = isForest
-    ? new THREE.DodecahedronGeometry(6.8, 1)
-    : new THREE.ConeGeometry(4.2, 3.6, 7);
-  canopyGeo.scale(1.45, 0.75, 1.35);
-  const canopyMat = new THREE.MeshStandardMaterial({
-    color: isForest ? 0x4d9e28 : 0x1e4620,
-    roughness: 0.82,
-    metalness: 0.04,
-  });
-
-  disposables.push(trunkGeo, trunkMat, canopyGeo, canopyMat);
-
-  const trunks = new THREE.InstancedMesh(trunkGeo, trunkMat, count);
-  const canopies = new THREE.InstancedMesh(canopyGeo, canopyMat, count);
-
+  const mountainCount = 68;
+  const mountains = new THREE.InstancedMesh(peakGeo, mountainMat, mountainCount);
   const dummy = new THREE.Object3D();
   const frame: TrackFrame = {
     pos: new THREE.Vector3(),
@@ -603,51 +607,411 @@ function buildOutdoorTerrainAndScenery(
   };
   const tint = new THREE.Color();
 
-  for (let i = 0; i < count; i++) {
-    const s = 20 + (i / count) * (config.lengthMeters + 40);
+  for (let i = 0; i < mountainCount; i++) {
+    const isHorizonEnd = i >= mountainCount - 8;
+    const s = isHorizonEnd
+      ? config.lengthMeters + 160 + (i - (mountainCount - 8)) * 18
+      : -20 + (i / (mountainCount - 8)) * (config.lengthMeters + 220);
+    spline.getFrameAt(Math.min(config.lengthMeters + 120, Math.max(-35, s)), frame);
+
+    const side = i % 2 === 0 ? -1 : 1;
+    const lateralDist = isHorizonEnd
+      ? ((i - (mountainCount - 8)) - 3.5) * 68
+      : side * (95 + ((i * 29) % 120));
+
+    const scaleXZ = 1.0 + ((i * 19) % 10) * 0.14;
+    const scaleY = 0.78 + ((i * 31) % 10) * 0.15;
+
+    dummy.position
+      .copy(frame.pos)
+      .addScaledVector(frame.right, lateralDist)
+      .addScaledVector(frame.up, -14);
+    dummy.rotation.set(0, (i * 1.37) % (Math.PI * 2), 0);
+    dummy.scale.set(scaleXZ, scaleY, scaleXZ * 0.92);
+    dummy.updateMatrix();
+    mountains.setMatrixAt(i, dummy.matrix);
+
+    // Subtle atmospheric blue-gray / warm-granite tint variation per peak
+    tint.setHSL(0.56 + ((i * 7) % 10) * 0.008, 0.12, 0.82 + ((i * 11) % 6) * 0.03);
+    mountains.setColorAt(i, tint);
+  }
+  mountains.instanceMatrix.needsUpdate = true;
+  if (mountains.instanceColor) mountains.instanceColor.needsUpdate = true;
+  mountains.computeBoundingSphere();
+  group.add(mountains);
+
+  // 3. Foreground Giant Overhanging Canopy Trees (bark-textured trunks + rich broadleaf crowns)
+  const barkTex = createTreeBarkTexture(maxAnisotropy);
+  disposables.push(barkTex);
+
+  const canopyTreeCount = 156;
+  const trunkGeo = new THREE.CylinderGeometry(0.45, 0.98, 18.5, 8);
+  trunkGeo.translate(0, 9.25, 0);
+  const trunkMat = new THREE.MeshStandardMaterial({
+    map: barkTex,
+    roughness: 0.92,
+    metalness: 0.02,
+  });
+
+  const canopyGeo = new THREE.DodecahedronGeometry(6.8, 1);
+  canopyGeo.scale(1.45, 0.75, 1.35);
+  const canopyMat = new THREE.MeshStandardMaterial({
+    color: 0x4d9e28,
+    roughness: 0.84,
+    metalness: 0.03,
+  });
+  disposables.push(trunkGeo, trunkMat, canopyGeo, canopyMat);
+
+  const trunks = new THREE.InstancedMesh(trunkGeo, trunkMat, canopyTreeCount);
+  const canopies = new THREE.InstancedMesh(canopyGeo, canopyMat, canopyTreeCount);
+
+  for (let i = 0; i < canopyTreeCount; i++) {
+    const s = 18 + (i / canopyTreeCount) * (config.lengthMeters + 60);
     spline.getFrameAt(s, frame);
     const side = i % 2 === 0 ? -1 : 1;
-    const dist = config.roadWidth * 0.5 + 3.8 + (i % 5) * 2.8;
-    const scale = 0.85 + ((i * 37) % 100) * 0.0035;
+    const dist = config.roadWidth * 0.5 + 3.8 + (i % 5) * 3.0;
+    const scale = 0.85 + ((i * 37) % 100) * 0.0036;
 
     dummy.position
       .copy(frame.pos)
       .addScaledVector(frame.right, side * dist)
       .addScaledVector(frame.up, -1.8);
-    // In forest canopy, lean giant trees inward overhead like Image 4!
     dummy.rotation.set(
       (((i * 13) % 10) - 5) * 0.02,
       (i * 1.1) % (Math.PI * 2),
-      isForest ? side * 0.24 : side * 0.08,
+      side * 0.23,
     );
     dummy.scale.set(scale, scale, scale);
     dummy.updateMatrix();
     trunks.setMatrixAt(i, dummy.matrix);
 
-    // Position canopy at top of leaning trunk
     dummy.position
       .copy(frame.pos)
-      .addScaledVector(frame.right, side * (dist - (isForest ? 3.8 : 1.0)))
-      .addScaledVector(frame.up, (isForest ? 15.5 : 11.5) * scale);
+      .addScaledVector(frame.right, side * (dist - 3.7))
+      .addScaledVector(frame.up, 15.8 * scale);
     dummy.rotation.set(0, i * 0.9, 0);
     dummy.scale.set(scale * 1.15, scale * 0.95, scale * 1.15);
     dummy.updateMatrix();
     canopies.setMatrixAt(i, dummy.matrix);
 
-    if (isForest) {
-      tint.setHSL(0.24 + ((i * 19) % 15) * 0.004, 0.62, 0.36 + ((i * 7) % 10) * 0.015);
-    } else {
-      tint.setHSL(0.32 + ((i * 11) % 12) * 0.004, 0.45, 0.24 + ((i * 5) % 8) * 0.012);
-    }
+    tint.setHSL(0.24 + ((i * 19) % 15) * 0.004, 0.62, 0.36 + ((i * 7) % 10) * 0.015);
     canopies.setColorAt(i, tint);
   }
-
   trunks.instanceMatrix.needsUpdate = true;
   canopies.instanceMatrix.needsUpdate = true;
   if (canopies.instanceColor) canopies.instanceColor.needsUpdate = true;
   trunks.computeBoundingSphere();
   canopies.computeBoundingSphere();
   group.add(trunks, canopies);
+
+  // 4. Midground Layered Pine/Conifer Forest along the valley slopes & mountain foothills
+  const pineCount = 140;
+  const pineTrunkGeo = new THREE.CylinderGeometry(0.32, 0.55, 6.0, 6);
+  pineTrunkGeo.translate(0, 3.0, 0);
+  const pineTier1Geo = new THREE.ConeGeometry(3.8, 9.5, 7);
+  pineTier1Geo.translate(0, 8.2, 0);
+  const pineTier2Geo = new THREE.ConeGeometry(2.7, 7.6, 7);
+  pineTier2Geo.translate(0, 13.4, 0);
+  const pineMat = new THREE.MeshStandardMaterial({
+    color: 0x2f6e24,
+    roughness: 0.88,
+    metalness: 0.02,
+  });
+  disposables.push(pineTrunkGeo, pineTier1Geo, pineTier2Geo, pineMat);
+
+  const pineTrunks = new THREE.InstancedMesh(pineTrunkGeo, trunkMat, pineCount);
+  const pineLower = new THREE.InstancedMesh(pineTier1Geo, pineMat, pineCount);
+  const pineUpper = new THREE.InstancedMesh(pineTier2Geo, pineMat, pineCount);
+
+  for (let i = 0; i < pineCount; i++) {
+    const s = 10 + (i / pineCount) * (config.lengthMeters + 80);
+    spline.getFrameAt(s, frame);
+    const side = i % 2 === 0 ? -1 : 1;
+    const slopeDist = config.roadWidth * 0.5 + 22 + ((i * 23) % 44);
+    const slopeY = Math.max(0, slopeDist - 18) * 0.32 - 3.8;
+    const scale = 0.85 + ((i * 41) % 10) * 0.085;
+
+    dummy.position
+      .copy(frame.pos)
+      .addScaledVector(frame.right, side * slopeDist)
+      .addScaledVector(frame.up, slopeY);
+    dummy.rotation.set(0, i * 0.77, 0);
+    dummy.scale.set(scale, scale, scale);
+    dummy.updateMatrix();
+    pineTrunks.setMatrixAt(i, dummy.matrix);
+    pineLower.setMatrixAt(i, dummy.matrix);
+    pineUpper.setMatrixAt(i, dummy.matrix);
+
+    tint.setHSL(0.28 + ((i * 13) % 12) * 0.004, 0.52, 0.25 + ((i * 5) % 9) * 0.014);
+    pineLower.setColorAt(i, tint);
+    pineUpper.setColorAt(i, tint);
+  }
+  pineTrunks.instanceMatrix.needsUpdate = true;
+  pineLower.instanceMatrix.needsUpdate = true;
+  pineUpper.instanceMatrix.needsUpdate = true;
+  if (pineLower.instanceColor) pineLower.instanceColor.needsUpdate = true;
+  if (pineUpper.instanceColor) pineUpper.instanceColor.needsUpdate = true;
+  pineTrunks.computeBoundingSphere();
+  pineLower.computeBoundingSphere();
+  pineUpper.computeBoundingSphere();
+  group.add(pineTrunks, pineLower, pineUpper);
+}
+
+/**
+ * Builds an urban sunset grand prix skyline for Race 5 (sunset_gp) with realistic
+ * concrete & glass-windowed high-rise buildings, rooftop structures, and avenue lighting.
+ */
+function buildCitySkylineScenery(
+  group: THREE.Group,
+  spline: TrackSpline,
+  config: RaceConfig,
+  maxAnisotropy: number,
+  disposables: { dispose: () => void }[],
+): void {
+  // 1. Extended urban concrete/plaza ground deck beneath and flanking the highway
+  const groundGeo = new THREE.PlaneGeometry(580, config.lengthMeters + 680, 24, 72);
+  groundGeo.rotateX(-Math.PI / 2);
+  const posAttr = groundGeo.attributes.position;
+  const sampleP = new THREE.Vector3();
+  for (let i = 0; i < posAttr.count; i++) {
+    const x = posAttr.getX(i);
+    const z = posAttr.getZ(i) - config.lengthMeters * 0.48;
+    const s = Math.max(-40, Math.min(config.lengthMeters + 100, -z));
+    spline.samplePosition(s, sampleP);
+    posAttr.setXYZ(i, x + sampleP.x * 0.35, sampleP.y - 4.4, z);
+  }
+  groundGeo.computeVertexNormals();
+  disposables.push(groundGeo);
+
+  const groundMat = new THREE.MeshStandardMaterial({
+    color: 0x1c1e26,
+    roughness: 0.9,
+    metalness: 0.08,
+  });
+  disposables.push(groundMat);
+  const groundMesh = new THREE.Mesh(groundGeo, groundMat);
+  groundMesh.receiveShadow = true;
+  group.add(groundMesh);
+
+  // 2. Two Realistic Procedural Concrete + Window Facade Materials (with warm lit windows!)
+  const officeTex = createBuildingFacadeTextures('concrete_office', maxAnisotropy);
+  const towerTex = createBuildingFacadeTextures('glass_tower', maxAnisotropy);
+  officeTex.albedo.repeat.set(1, 1);
+  officeTex.emissive.repeat.set(1, 1);
+  towerTex.albedo.repeat.set(1, 1);
+  towerTex.emissive.repeat.set(1, 1);
+  disposables.push(officeTex.albedo, officeTex.emissive, towerTex.albedo, towerTex.emissive);
+
+  const applyWorldFacadeUvScale = (
+    mat: THREE.MeshStandardMaterial,
+    cacheKey: string,
+    bayWidthM: number,
+    colsPerTile: number,
+    floorHeightM: number,
+    floorsPerTile: number,
+  ) => {
+    mat.customProgramCacheKey = () => cacheKey;
+    mat.onBeforeCompile = (shader) => {
+      shader.vertexShader = shader.vertexShader.replace(
+        '#include <uv_vertex>',
+        `#include <uv_vertex>
+        #ifdef USE_INSTANCING
+          float instW = length( instanceMatrix[0].xyz );
+          float instH = length( instanceMatrix[1].xyz );
+          float instD = length( instanceMatrix[2].xyz );
+          float faceSpan = abs( normal.x ) > 0.5 ? instD : instW;
+          float uTiles = max( 2.0, floor( faceSpan / ${bayWidthM.toFixed(2)} + 0.5 ) ) / ${colsPerTile.toFixed(1)};
+          float vTiles = max( 3.0, floor( instH / ${floorHeightM.toFixed(2)} + 0.5 ) ) / ${floorsPerTile.toFixed(1)};
+          vec2 facadeScale = vec2( uTiles, vTiles );
+          #ifdef USE_MAP
+            vMapUv *= facadeScale;
+          #endif
+          #ifdef USE_EMISSIVEMAP
+            vEmissiveMapUv *= facadeScale;
+          #endif
+        #endif`,
+      );
+    };
+  };
+
+  const concreteRoofMat = new THREE.MeshStandardMaterial({
+    color: 0x3b4252,
+    roughness: 0.86,
+    metalness: 0.12,
+  });
+
+  const officeWallMat = new THREE.MeshStandardMaterial({
+    map: officeTex.albedo,
+    emissiveMap: officeTex.emissive,
+    emissive: new THREE.Color(0xffffff),
+    emissiveIntensity: 0.95,
+    roughness: 0.68,
+    metalness: 0.22,
+  });
+  applyWorldFacadeUvScale(officeWallMat, 'city-facade-office', 3.2, 6, 3.5, 8);
+
+  const towerWallMat = new THREE.MeshStandardMaterial({
+    map: towerTex.albedo,
+    emissiveMap: towerTex.emissive,
+    emissive: new THREE.Color(0xffffff),
+    emissiveIntensity: 1.05,
+    roughness: 0.42,
+    metalness: 0.45,
+  });
+  applyWorldFacadeUvScale(towerWallMat, 'city-facade-tower', 2.6, 8, 3.5, 8);
+  disposables.push(concreteRoofMat, officeWallMat, towerWallMat);
+
+  // Unit cube shifted so y = 0 sits flush at ground level
+  const bldgGeo = new THREE.BoxGeometry(1, 1, 1);
+  bldgGeo.translate(0, 0.5, 0);
+  const roofUnitGeo = new THREE.BoxGeometry(0.58, 0.09, 0.58);
+  roofUnitGeo.translate(0, 1.045, 0);
+  disposables.push(bldgGeo, roofUnitGeo);
+
+  // Multi-material per cube: textured windows on 4 sides, matte concrete on roof/base
+  const officeMats = [officeWallMat, officeWallMat, concreteRoofMat, concreteRoofMat, officeWallMat, officeWallMat];
+  const towerMats = [towerWallMat, towerWallMat, concreteRoofMat, concreteRoofMat, towerWallMat, towerWallMat];
+
+  // Collect building placements skipping the two highway tunnel zones ([420..860], [1580..2060]) for streetfront row
+  const inTunnelZone = (s: number) => (s > 405 && s < 875) || (s > 1565 && s < 2075);
+
+  const officeMatrices: { mat: THREE.Matrix4; tint: THREE.Color }[] = [];
+  const towerMatrices: { mat: THREE.Matrix4; tint: THREE.Color }[] = [];
+  const roofMatrices: THREE.Matrix4[] = [];
+
+  const dummy = new THREE.Object3D();
+  const frame: TrackFrame = {
+    pos: new THREE.Vector3(),
+    forward: new THREE.Vector3(),
+    right: new THREE.Vector3(),
+    up: new THREE.Vector3(),
+    bankAngle: 0,
+  };
+  const basis = new THREE.Matrix4();
+
+  // Front avenue buildings + second-row towering skyline
+  let idx = 0;
+  for (let s = -10; s < config.lengthMeters + 110; s += 26) {
+    spline.getFrameAt(s, frame);
+    basis.makeBasis(frame.right, _worldUp, frame.forward.clone().setY(0).normalize().negate());
+
+    for (const side of [-1, 1]) {
+      // Front street-side concrete & glass building (kept outside tunnel shell)
+      const isTunnel = inTunnelZone(s);
+      const width = 12 + ((idx * 7) % 10);
+      const depth = 13 + ((idx * 11) % 9);
+      const height = 24 + ((idx * 17) % 42);
+      const dist = config.roadWidth * 0.5 + (isTunnel ? 24 : 11.5) + width * 0.5 + ((idx * 5) % 6);
+
+      dummy.position
+        .copy(frame.pos)
+        .addScaledVector(frame.right, side * dist);
+      dummy.position.y = frame.pos.y - 4.4;
+      dummy.quaternion.setFromRotationMatrix(basis);
+      dummy.scale.set(width, height, depth);
+      dummy.updateMatrix();
+
+      const tint = new THREE.Color().setHSL(
+        0.07 + ((idx * 13) % 8) * 0.015,
+        0.08,
+        0.82 + ((idx * 19) % 7) * 0.03,
+      );
+
+      if (idx % 2 === 0) {
+        officeMatrices.push({ mat: dummy.matrix.clone(), tint });
+      } else {
+        towerMatrices.push({ mat: dummy.matrix.clone(), tint });
+      }
+      roofMatrices.push(dummy.matrix.clone());
+
+      // Second-row tall skyline skyscraper behind front buildings for rich urban depth
+      if (idx % 2 === 0) {
+        const bgW = 18 + ((idx * 13) % 14);
+        const bgD = 18 + ((idx * 9) % 12);
+        const bgH = 48 + ((idx * 23) % 58);
+        const bgDist = dist + 28 + ((idx * 17) % 24);
+
+        dummy.position
+          .copy(frame.pos)
+          .addScaledVector(frame.right, side * bgDist);
+        dummy.position.y = frame.pos.y - 4.4;
+        dummy.quaternion.setFromRotationMatrix(basis);
+        dummy.scale.set(bgW, bgH, bgD);
+        dummy.updateMatrix();
+
+        const bgTint = new THREE.Color().setHSL(0.62, 0.14, 0.72 + ((idx * 5) % 6) * 0.04);
+        towerMatrices.push({ mat: dummy.matrix.clone(), tint: bgTint });
+        roofMatrices.push(dummy.matrix.clone());
+      }
+
+      idx++;
+    }
+  }
+
+  const officeInst = new THREE.InstancedMesh(bldgGeo, officeMats, Math.max(1, officeMatrices.length));
+  officeMatrices.forEach((entry, i) => {
+    officeInst.setMatrixAt(i, entry.mat);
+    officeInst.setColorAt(i, entry.tint);
+  });
+  officeInst.instanceMatrix.needsUpdate = true;
+  if (officeInst.instanceColor) officeInst.instanceColor.needsUpdate = true;
+  officeInst.computeBoundingSphere();
+
+  const towerInst = new THREE.InstancedMesh(bldgGeo, towerMats, Math.max(1, towerMatrices.length));
+  towerMatrices.forEach((entry, i) => {
+    towerInst.setMatrixAt(i, entry.mat);
+    towerInst.setColorAt(i, entry.tint);
+  });
+  towerInst.instanceMatrix.needsUpdate = true;
+  if (towerInst.instanceColor) towerInst.instanceColor.needsUpdate = true;
+  towerInst.computeBoundingSphere();
+
+  const roofInst = new THREE.InstancedMesh(roofUnitGeo, concreteRoofMat, Math.max(1, roofMatrices.length));
+  roofMatrices.forEach((m, i) => roofInst.setMatrixAt(i, m));
+  roofInst.instanceMatrix.needsUpdate = true;
+  roofInst.computeBoundingSphere();
+
+  group.add(officeInst, towerInst, roofInst);
+
+  // 3. Urban Highway Streetlight Poles & Warm Sodium/LED Lamps along open sections
+  const poleGeo = new THREE.CylinderGeometry(0.14, 0.2, 8.6, 6);
+  poleGeo.translate(0, 4.3, 0);
+  const lampGeo = new THREE.BoxGeometry(1.5, 0.24, 0.45);
+  lampGeo.translate(0, 8.6, 0);
+  const poleMat = new THREE.MeshStandardMaterial({ color: 0x334155, metalness: 0.7, roughness: 0.35 });
+  const lampMat = new THREE.MeshBasicMaterial({ color: 0xfde68a });
+  disposables.push(poleGeo, lampGeo, poleMat, lampMat);
+
+  const lampPlacements: THREE.Matrix4[] = [];
+  for (let s = 20; s < config.lengthMeters + 60; s += 38) {
+    if (inTunnelZone(s)) continue;
+    spline.getFrameAt(s, frame);
+    basis.makeBasis(frame.right, frame.up, frame.forward.clone().negate());
+    for (const side of [-1, 1]) {
+      dummy.position
+        .copy(frame.pos)
+        .addScaledVector(frame.right, side * (config.roadWidth * 0.5 + 1.35))
+        .addScaledVector(frame.up, -0.2);
+      dummy.quaternion.setFromRotationMatrix(basis);
+      dummy.scale.set(1, 1, 1);
+      dummy.updateMatrix();
+      lampPlacements.push(dummy.matrix.clone());
+    }
+  }
+
+  if (lampPlacements.length > 0) {
+    const poles = new THREE.InstancedMesh(poleGeo, poleMat, lampPlacements.length);
+    const lamps = new THREE.InstancedMesh(lampGeo, lampMat, lampPlacements.length);
+    lampPlacements.forEach((m, i) => {
+      poles.setMatrixAt(i, m);
+      lamps.setMatrixAt(i, m);
+    });
+    poles.instanceMatrix.needsUpdate = true;
+    lamps.instanceMatrix.needsUpdate = true;
+    poles.computeBoundingSphere();
+    lamps.computeBoundingSphere();
+    group.add(poles, lamps);
+  }
 }
 
 function buildCyberSpaceAtmosphere(
