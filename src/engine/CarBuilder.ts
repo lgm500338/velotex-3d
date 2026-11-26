@@ -35,26 +35,24 @@ export function buildSupercarRig(
   // Glossy metallic automotive clearcoat paint (deep saturated basecoat + crisp clearcoat shine)
   const paintMaterial = new THREE.MeshPhysicalMaterial({
     color: primaryHex,
-    metalness: 0.45,
-    roughness: 0.3,
+    metalness: 0.75,
+    roughness: 0.25,
     clearcoat: 1.0,
     clearcoatRoughness: 0.04,
     ior: 1.52,
-    reflectivity: 1.0,
     envMap,
-    envMapIntensity: 1.05,
+    envMapIntensity: 0.8,
   });
 
   const accentMaterial = new THREE.MeshPhysicalMaterial({
     color: accentHex,
-    metalness: 0.45,
-    roughness: 0.3,
+    metalness: 0.75,
+    roughness: 0.25,
     clearcoat: 1.0,
     clearcoatRoughness: 0.045,
     ior: 1.52,
-    reflectivity: 1.0,
     envMap,
-    envMapIntensity: 1.0,
+    envMapIntensity: 0.8,
   });
 
   const carbonMat = new THREE.MeshStandardMaterial({
