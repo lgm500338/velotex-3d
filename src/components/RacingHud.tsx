@@ -140,9 +140,9 @@ export function RacingHud({
           <div className="text-[11px] font-bold tracking-wider text-sky-400">
             {t.posLabel}
           </div>
-          <div className="flex items-baseline gap-1.5">
+          <div className="flex items-baseline gap-1.5 whitespace-nowrap">
             <span
-              className={`font-display text-3xl sm:text-4xl font-extrabold italic leading-none tabular-nums ${
+              className={`font-display text-3xl sm:text-4xl font-extrabold italic leading-none tabular-nums whitespace-nowrap ${
                 hud.position === 1
                   ? 'text-amber-400'
                   : hud.position <= 3
@@ -152,7 +152,7 @@ export function RacingHud({
             >
               {t.ordinal(hud.position)}
             </span>
-            <span className="font-display text-xs font-semibold text-slate-400 tabular-nums">
+            <span className="font-display text-xs font-semibold text-slate-400 tabular-nums whitespace-nowrap">
               / {hud.totalRacers}
             </span>
           </div>
