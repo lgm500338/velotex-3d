@@ -1,6 +1,5 @@
 export type Language = 'ko' | 'en';
 
-export type CameraMode = 'chase' | 'cockpit' | 'hood';
 
 export type GamePhase = 'menu' | 'countdown' | 'racing' | 'paused' | 'finished';
 

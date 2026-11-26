@@ -3,7 +3,6 @@ import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { CAR_LIVERIES, RACES, RIVAL_PROFILES } from '../data/races';
 import {
   CalloutEvent,
-  CameraMode,
   GamePhase,
   HudTelemetry,
   RaceConfig,
@@ -12,7 +11,7 @@ import {
 } from '../types/game';
 import { AudioEngine } from './AudioEngine';
 import { buildSupercarRig, SupercarRig } from './CarBuilder';
-import { CockpitDashDisplay, createContactShadowTexture } from './ProceduralTextures';
+import { createContactShadowTexture } from './ProceduralTextures';
 import { buildTrackWorld, BuiltTrack, TrackFrame } from './TrackSystem';
 
 interface RacerState {
@@ -101,7 +100,6 @@ export class RacingEngine {
   private rimLight!: THREE.DirectionalLight;
   private envRenderTarget: THREE.WebGLRenderTarget | null = null;
   private shadowTexture!: THREE.CanvasTexture;
-  private dashDisplay!: CockpitDashDisplay;
 
   private currentRace: RaceConfig = RACES[0];
   private currentLiveryId = CAR_LIVERIES[0].id;
@@ -120,7 +118,6 @@ export class RacingEngine {
 
   // Game State
   private phase: GamePhase = 'menu';
-  private cameraMode: CameraMode = 'chase';
   private autoGas = true;
   private countdownTimer = 3.2;
   private lastCountdownInt = 4;
@@ -259,9 +256,7 @@ export class RacingEngine {
       this.rimLight.position.set(-22, 16, -24);
       this.scene.add(this.rimLight);
 
-      const maxAniso = this.renderer.capabilities.getMaxAnisotropy();
       this.shadowTexture = createContactShadowTexture();
-      this.dashDisplay = new CockpitDashDisplay(maxAniso);
 
       this.initParticlePools();
       this.loadRace(this.currentRace, false);
@@ -404,7 +399,6 @@ export class RacingEngine {
 
     RIVAL_PROFILES.forEach((profile, idx) => {
       const rig = buildSupercarRig(profile.colorHex, 0xffffff, this.shadowTexture, {
-        includeCockpit: false,
         envMap: carEnvMap,
         isMobile: this.isCoarsePointer,
       });
@@ -435,8 +429,6 @@ export class RacingEngine {
     // Player car
     const livery = CAR_LIVERIES.find((l) => l.id === this.currentLiveryId) ?? CAR_LIVERIES[0];
     const playerRig = buildSupercarRig(livery.primaryHex, livery.accentHex, this.shadowTexture, {
-      includeCockpit: true,
-      dashTexture: this.dashDisplay.texture,
       envMap: carEnvMap,
       isMobile: this.isCoarsePointer,
     });
@@ -464,7 +456,6 @@ export class RacingEngine {
     };
     this.racers.push(this.playerRacer);
 
-    this.applyCameraModeVisibility();
     this.resetRaceMetrics();
     this.positionAllCarMeshes(0.016);
     this.camInitialized = false;
@@ -510,7 +501,7 @@ export class RacingEngine {
         for (const mat of mats) {
           if (mat && !disposedMats.has(mat)) {
             disposedMats.add(mat);
-            // Shared textures (this.shadowTexture, this.dashDisplay.texture) are owned by RacingEngine
+            // Shared textures (this.shadowTexture) are owned by RacingEngine
             mat.dispose();
           }
         }
@@ -537,16 +528,6 @@ export class RacingEngine {
     }
     this.callbacks.onPhaseChange(phase);
     this.pushHudTelemetry(true);
-  }
-
-  public setCameraMode(mode: CameraMode): void {
-    this.cameraMode = mode;
-    this.applyCameraModeVisibility();
-    this.camInitialized = false;
-  }
-
-  public getCameraMode(): CameraMode {
-    return this.cameraMode;
   }
 
   public setAutoGas(enabled: boolean): void {
@@ -587,15 +568,6 @@ export class RacingEngine {
 
   public restartCurrentRace(): void {
     this.loadRace(this.currentRace, true);
-  }
-
-  private applyCameraModeVisibility(): void {
-    if (!this.playerRacer) return;
-    const isCockpit = this.cameraMode === 'cockpit';
-    this.playerRacer.rig.exteriorCabinGroup.visible = !isCockpit;
-    if (this.playerRacer.rig.cockpitGroup) {
-      this.playerRacer.rig.cockpitGroup.visible = isCockpit;
-    }
   }
 
   private bindEvents(): void {
@@ -645,12 +617,7 @@ export class RacingEngine {
 
   private handleKeyDown = (e: KeyboardEvent): void => {
     this.keys.add(e.code);
-    if (e.code === 'KeyC' && (this.phase === 'racing' || this.phase === 'countdown')) {
-      const next: CameraMode =
-        this.cameraMode === 'chase' ? 'cockpit' : this.cameraMode === 'cockpit' ? 'hood' : 'chase';
-      this.setCameraMode(next);
-      window.dispatchEvent(new CustomEvent('velotex-camera-sync', { detail: next }));
-    } else if ((e.code === 'Escape' || e.code === 'KeyP') && (this.phase === 'racing' || this.phase === 'paused')) {
+    if ((e.code === 'Escape' || e.code === 'KeyP') && (this.phase === 'racing' || this.phase === 'paused')) {
       if (this.phase === 'racing') this.pause();
       else this.resume();
     }
@@ -798,11 +765,9 @@ export class RacingEngine {
       gear: 1,
       isNitro: false,
       driftAmount: 0,
-      isCockpit: this.cameraMode === 'cockpit',
       throttleLoad: 0.75,
     });
 
-    this.updateCockpitVisuals(dt, 0, false);
     this.updateCamera(dt, 0);
 
     if (this.countdownTimer <= 0) {
@@ -973,12 +938,8 @@ export class RacingEngine {
       gear: this.currentGear,
       isNitro: this.isNitroActive || this.boostPadTimer > 0,
       driftAmount,
-      isCockpit: this.cameraMode === 'cockpit',
       throttleLoad: accelerating ? 1 : 0.25,
     });
-
-    // 10. Update Cockpit Steering Wheel, Shift LEDs, & Live Digital Dash
-    this.updateCockpitVisuals(dt, speedKmh, this.isNitroActive || this.boostPadTimer > 0);
 
     // 11. Update Camera & Speed Lines
     this.updateCamera(dt, speedKmh);
@@ -1218,33 +1179,6 @@ export class RacingEngine {
     }
   }
 
-  private updateCockpitVisuals(_dt: number, speedKmh: number, isBoosting: boolean): void {
-    const rig = this.playerRacer?.rig;
-    if (!rig || this.cameraMode !== 'cockpit') return;
-
-    // Rotate 3D steering wheel cleanly with steering input (up to +/- 75 deg)
-    if (rig.steeringWheelGroup) {
-      rig.steeringWheelGroup.rotation.z = -this.steerSmoothed * 1.25;
-    }
-
-    // Illuminate 9 shift-light LEDs across steering wheel top rim with live RPM
-    const litLeds = Math.floor(this.currentRpm * 9.5);
-    const redlineFlash = this.currentRpm > 0.92 && Math.floor(this.animTime * 16) % 2 === 0;
-    for (let i = 0; i < rig.shiftLeds.length; i++) {
-      rig.shiftLeds[i].emissiveIntensity = redlineFlash ? 3.5 : i < litLeds ? 2.4 : 0.05;
-    }
-
-    // Update live procedural CanvasTexture dashboard cluster
-    this.dashDisplay.update(
-      speedKmh,
-      this.currentRpm,
-      this.currentGear,
-      this.nitroCharge,
-      this.computePlayerRank(),
-      isBoosting,
-    );
-  }
-
   private updateCamera(dt: number, speedKmh: number): void {
     if (!this.builtTrack || !this.playerRacer) return;
     const p = this.playerRacer;
@@ -1264,74 +1198,43 @@ export class RacingEngine {
     const isBoosting = this.isNitroActive || this.boostPadTimer > 0;
     const speedRatio = THREE.MathUtils.clamp(speedKmh / 320, 0, 1.15);
 
-    if (this.cameraMode === 'cockpit') {
-      // Authentic Driver's Seat Eye Position inside car (sees steering wheel, dash, A-pillars, and hood!)
-      p.rig.group.updateMatrixWorld();
-      _camPos.set(0, 1.11, 0.24).applyMatrix4(p.rig.group.matrixWorld);
-      // Look far down the track ahead with subtle apex look-into-turn offset
-      _camLook
-        .set(this.steerSmoothed * 0.55, 1.02, -16)
-        .applyMatrix4(p.rig.group.matrixWorld);
+    // 3rd-person chase cam
+    const backDist = 6.2 + speedRatio * 1.15 + (isBoosting ? 0.9 : 0);
+    const upHeight = 2.65 + (isBoosting ? -0.15 : 0);
 
-      this.camera.position.copy(_camPos).add(_shakeOffset);
-      this.camera.up.copy(_frame.up);
-      this.camera.lookAt(_camLook);
+    _camPos
+      .copy(_frame.pos)
+      .addScaledVector(_frame.right, p.lateral * 0.88 - this.steerSmoothed * 0.45)
+      .addScaledVector(_frame.up, upHeight)
+      .addScaledVector(_frame.forward, -backDist);
 
-      const targetFov = 70 + speedRatio * 14 + (isBoosting ? 9 : 0);
-      this.camera.fov = THREE.MathUtils.damp(this.camera.fov, targetFov, 7, dt);
-      this.camera.updateProjectionMatrix();
-    } else if (this.cameraMode === 'hood') {
-      // Low-slung Bonnet/Hood Cam for intense velocity perception
-      p.rig.group.updateMatrixWorld();
-      _camPos.set(0, 1.18, -0.82).applyMatrix4(p.rig.group.matrixWorld);
-      _camLook.set(this.steerSmoothed * 0.4, 0.92, -20).applyMatrix4(p.rig.group.matrixWorld);
+    _camLook
+      .copy(_frame.pos)
+      .addScaledVector(_frame.right, p.lateral * 0.92 + this.steerSmoothed * 1.1)
+      .addScaledVector(_frame.up, 1.25)
+      .addScaledVector(_frame.forward, 18);
 
-      this.camera.position.copy(_camPos).add(_shakeOffset);
-      this.camera.up.copy(_frame.up);
-      this.camera.lookAt(_camLook);
+    _camUp.copy(_frame.up);
 
-      const targetFov = 74 + speedRatio * 16 + (isBoosting ? 10 : 0);
-      this.camera.fov = THREE.MathUtils.damp(this.camera.fov, targetFov, 7, dt);
-      this.camera.updateProjectionMatrix();
+    if (!this.camInitialized) {
+      this.smoothCamPos.copy(_camPos);
+      this.smoothCamLook.copy(_camLook);
+      this.smoothCamUp.copy(_camUp);
+      this.camInitialized = true;
     } else {
-      // 3rd-Person Arcade Supercar Chase Cam (honoring Images 1-5!)
-      const backDist = 6.2 + speedRatio * 1.15 + (isBoosting ? 0.9 : 0);
-      const upHeight = 2.65 + (isBoosting ? -0.15 : 0);
-
-      _camPos
-        .copy(_frame.pos)
-        .addScaledVector(_frame.right, p.lateral * 0.88 - this.steerSmoothed * 0.45)
-        .addScaledVector(_frame.up, upHeight)
-        .addScaledVector(_frame.forward, -backDist);
-
-      _camLook
-        .copy(_frame.pos)
-        .addScaledVector(_frame.right, p.lateral * 0.92 + this.steerSmoothed * 1.1)
-        .addScaledVector(_frame.up, 1.25)
-        .addScaledVector(_frame.forward, 18);
-
-      _camUp.copy(_frame.up);
-
-      if (!this.camInitialized) {
-        this.smoothCamPos.copy(_camPos);
-        this.smoothCamLook.copy(_camLook);
-        this.smoothCamUp.copy(_camUp);
-        this.camInitialized = true;
-      } else {
-        const alpha = 1 - Math.exp(-12 * dt);
-        this.smoothCamPos.lerp(_camPos, alpha);
-        this.smoothCamLook.lerp(_camLook, alpha);
-        this.smoothCamUp.lerp(_camUp, 1 - Math.exp(-8 * dt)).normalize();
-      }
-
-      this.camera.position.copy(this.smoothCamPos).add(_shakeOffset);
-      this.camera.up.copy(this.smoothCamUp);
-      this.camera.lookAt(this.smoothCamLook);
-
-      const targetFov = 64 + speedRatio * 16 + (isBoosting ? 11 : 0);
-      this.camera.fov = THREE.MathUtils.damp(this.camera.fov, targetFov, 6, dt);
-      this.camera.updateProjectionMatrix();
+      const alpha = 1 - Math.exp(-12 * dt);
+      this.smoothCamPos.lerp(_camPos, alpha);
+      this.smoothCamLook.lerp(_camLook, alpha);
+      this.smoothCamUp.lerp(_camUp, 1 - Math.exp(-8 * dt)).normalize();
     }
+
+    this.camera.position.copy(this.smoothCamPos).add(_shakeOffset);
+    this.camera.up.copy(this.smoothCamUp);
+    this.camera.lookAt(this.smoothCamLook);
+
+    const targetFov = 64 + speedRatio * 16 + (isBoosting ? 11 : 0);
+    this.camera.fov = THREE.MathUtils.damp(this.camera.fov, targetFov, 6, dt);
+    this.camera.updateProjectionMatrix();
 
     // Animate 3D Speed Wind Lines above 195 km/h or during Nitro
     const showLines = this.phase === 'racing' && (speedKmh > 195 || isBoosting);
@@ -1374,7 +1277,6 @@ export class RacingEngine {
       gear: p.speedMs > 1 ? 2 : 1,
       isNitro: false,
       driftAmount: 0,
-      isCockpit: this.cameraMode === 'cockpit',
       throttleLoad: 0.05,
     });
   }
@@ -1570,7 +1472,6 @@ export class RacingEngine {
 
     this.builtTrack?.dispose();
     this.shadowTexture?.dispose();
-    this.dashDisplay?.dispose();
     this.sparkGeo?.dispose();
     this.sparkMat?.dispose();
     this.smokeGeo?.dispose();

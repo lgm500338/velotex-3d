@@ -1,6 +1,5 @@
 import { useState } from 'react';
 import {
-  Camera,
   ChevronDown,
   ChevronUp,
   Flag,
@@ -17,7 +16,6 @@ import {
 import { TRANSLATIONS } from '../i18n/translations';
 import {
   CalloutEvent,
-  CameraMode,
   GamePhase,
   HudTelemetry,
   Language,
@@ -30,8 +28,6 @@ interface RacingHudProps {
   race: RaceConfig;
   phase: GamePhase;
   hud: HudTelemetry;
-  cameraMode: CameraMode;
-  onSelectCamera: (mode: CameraMode) => void;
   autoGas: boolean;
   onToggleAutoGas: () => void;
   muted: boolean;
@@ -57,8 +53,6 @@ export function RacingHud({
   race,
   phase,
   hud,
-  cameraMode,
-  onSelectCamera,
   autoGas,
   onToggleAutoGas,
   muted,
@@ -411,33 +405,6 @@ export function RacingHud({
             dockOpen ? 'translate-y-0 opacity-100' : 'pointer-events-none translate-y-16 opacity-0 h-0 py-0 overflow-hidden'
           }`}
         >
-          {/* Camera Mode Direct Buttons (Chase / Cockpit / Hood) */}
-          <div className="flex items-center gap-1 rounded-lg bg-[#0d1424] p-0.5 border border-white/10">
-            {(
-              [
-                { id: 'chase', label: t.camChase },
-                { id: 'cockpit', label: t.camCockpit },
-                { id: 'hood', label: t.camHood },
-              ] as const
-            ).map((cam) => (
-              <button
-                key={cam.id}
-                type="button"
-                onClick={() => onSelectCamera(cam.id)}
-                className={`flex items-center gap-1 rounded-md px-2 py-1.5 sm:px-2.5 text-[11px] sm:text-xs font-semibold transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
-                  cameraMode === cam.id
-                    ? 'bg-sky-500 text-slate-950'
-                    : 'text-slate-300 hover:text-white'
-                }`}
-              >
-                <Camera className="h-3.5 w-3.5" />
-                <span>{cam.label}</span>
-              </button>
-            ))}
-          </div>
-
-          <div className="hidden sm:block h-5 w-px bg-white/12" />
-
           {/* Utility Row (Auto-Gas, Audio, Language, Pause) — always visible on mobile */}
           <div className="flex items-center gap-1 sm:gap-1.5">
             {/* Auto-Gas Toggle */}

@@ -220,12 +220,11 @@ export class AudioEngine {
     gear: number; // 1..6
     isNitro: boolean;
     driftAmount: number; // 0..1
-    isCockpit: boolean;
     throttleLoad: number; // 0..1
   }): void {
     if (!this.initialized || !this.ctx || !this.active) return;
     const now = this.ctx.currentTime;
-    const { speedKmh, rpm, gear, isNitro, driftAmount, isCockpit, throttleLoad } = params;
+    const { speedKmh, rpm, gear, isNitro, driftAmount, throttleLoad } = params;
 
     // Base frequency rises aggressively with RPM and subtly with gear
     const gearBoost = 1 + (gear - 1) * 0.06;
@@ -237,8 +236,7 @@ export class AudioEngine {
     // Fifth harmonic gives aggressive exotic V10 howl
     this.oscHarm?.frequency.setTargetAtTime(baseFreq * 1.498, now, 0.03);
 
-    // Cockpit view has slightly warmer interior cabin resonance; chase cam is brighter
-    const maxCutoff = isCockpit ? 1350 : 1850;
+    const maxCutoff = 1850;
     const cutoff = 210 + rpm * maxCutoff * (0.65 + throttleLoad * 0.35) + (isNitro ? 550 : 0);
     this.engineFilter?.frequency.setTargetAtTime(cutoff, now, 0.04);
 
@@ -262,7 +260,7 @@ export class AudioEngine {
     this.screechGain?.gain.setTargetAtTime(targetScreech, now, 0.04);
 
     // Aerodynamic wind rush
-    const windLevel = Math.pow(Math.min(1, speedKmh / 320), 2) * (isCockpit ? 0.11 : 0.17);
+    const windLevel = Math.pow(Math.min(1, speedKmh / 320), 2) * 0.17;
     this.windFilter?.frequency.setTargetAtTime(220 + speedKmh * 3.8, now, 0.06);
     this.windGain?.gain.setTargetAtTime(windLevel, now, 0.08);
   }

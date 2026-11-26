@@ -9,9 +9,6 @@ export interface SupercarRig {
   nitroFlames: THREE.Mesh[];
   paintMaterial: THREE.MeshPhysicalMaterial;
   accentMaterial: THREE.MeshPhysicalMaterial;
-  cockpitGroup: THREE.Group | null;
-  steeringWheelGroup: THREE.Group | null;
-  shiftLeds: THREE.MeshStandardMaterial[];
 }
 
 /**
@@ -23,8 +20,6 @@ export function buildSupercarRig(
   accentHex: number,
   shadowTexture: THREE.Texture,
   options: {
-    includeCockpit: boolean;
-    dashTexture?: THREE.Texture;
     envMap?: THREE.Texture | null;
     isMobile?: boolean;
   },
@@ -152,7 +147,7 @@ export function buildSupercarRig(
   mainBody.receiveShadow = true;
   group.add(mainBody);
 
-  // 2. Sculpted Front Racing Hood Stripe + Vent (visible from cockpit view too!)
+  // 2. Sculpted Front Racing Hood Stripe + Vent
   const hoodStripe = new THREE.Mesh(new THREE.BoxGeometry(0.46, 0.035, 1.48), accentMaterial);
   hoodStripe.position.set(0, 0.71, -1.32);
   hoodStripe.rotation.x = 0.12;
@@ -189,7 +184,7 @@ export function buildSupercarRig(
     group.add(mirrorCap);
   }
 
-  // 3. Exterior Cabin Canopy (hidden in 1st-person cockpit view so it never blocks camera)
+  // 3. Exterior Cabin Canopy 
   const exteriorCabinGroup = new THREE.Group();
   const cabinProfile = new THREE.Shape();
   cabinProfile.moveTo(-0.76, 0.70);
@@ -338,20 +333,6 @@ export function buildSupercarRig(
     }
   }
 
-  // 8. Detailed 1st-Person Driver's Seat Cockpit Rig (only for player car)
-  let cockpitGroup: THREE.Group | null = null;
-  let steeringWheelGroup: THREE.Group | null = null;
-  const shiftLeds: THREE.MeshStandardMaterial[] = [];
-
-  if (options.includeCockpit) {
-    const cockpit = buildCockpitInterior(options.dashTexture, paintMaterial, carbonMat, chromeMat);
-    cockpitGroup = cockpit.cockpitGroup;
-    steeringWheelGroup = cockpit.steeringWheelGroup;
-    shiftLeds.push(...cockpit.shiftLeds);
-    cockpitGroup.visible = false; // toggled when entering Cockpit camera mode
-    group.add(cockpitGroup);
-  }
-
   return {
     group,
     exteriorCabinGroup,
@@ -361,168 +342,5 @@ export function buildSupercarRig(
     nitroFlames,
     paintMaterial,
     accentMaterial,
-    cockpitGroup,
-    steeringWheelGroup,
-    shiftLeds,
   };
-}
-
-function buildCockpitInterior(
-  dashTexture: THREE.Texture | undefined,
-  paintMat: THREE.MeshPhysicalMaterial,
-  carbonMat: THREE.MeshStandardMaterial,
-  chromeMat: THREE.MeshStandardMaterial,
-): {
-  cockpitGroup: THREE.Group;
-  steeringWheelGroup: THREE.Group;
-  shiftLeds: THREE.MeshStandardMaterial[];
-} {
-  const cockpitGroup = new THREE.Group();
-
-  const alcantaraMat = new THREE.MeshStandardMaterial({
-    color: 0x10131a,
-    metalness: 0.08,
-    roughness: 0.88,
-  });
-
-  const trimRedMat = new THREE.MeshStandardMaterial({
-    color: 0xef4444,
-    emissive: 0x991b1b,
-    emissiveIntensity: 0.5,
-    roughness: 0.35,
-  });
-
-  // Lower dashboard cowl spanning interior width
-  const dashBase = new THREE.Mesh(new THREE.BoxGeometry(1.56, 0.34, 0.62), alcantaraMat);
-  dashBase.position.set(0, 0.72, -0.58);
-  cockpitGroup.add(dashBase);
-
-  // Upper sculpted dashboard hood over instrument cluster
-  const binnacle = new THREE.Mesh(new THREE.BoxGeometry(0.64, 0.12, 0.36), carbonMat);
-  binnacle.position.set(0, 0.94, -0.62);
-  cockpitGroup.add(binnacle);
-
-  // Ambient cyan LED accent strip across dashboard
-  const dashAccent = new THREE.Mesh(
-    new THREE.BoxGeometry(1.48, 0.016, 0.02),
-    new THREE.MeshBasicMaterial({ color: 0x38bdf8 }),
-  );
-  dashAccent.position.set(0, 0.84, -0.27);
-  cockpitGroup.add(dashAccent);
-
-  // Live Digital Instrument Cluster Screen
-  const dashScreenMat = new THREE.MeshBasicMaterial({
-    map: dashTexture ?? null,
-    color: dashTexture ? 0xffffff : 0x0f172a,
-  });
-  const dashScreen = new THREE.Mesh(new THREE.PlaneGeometry(0.46, 0.21), dashScreenMat);
-  dashScreen.position.set(0, 0.84, -0.45);
-  dashScreen.rotation.x = -0.18;
-  cockpitGroup.add(dashScreen);
-
-  // Left & Right A-Pillars + Windshield Top Header (authentic cabin framing!)
-  for (const side of [-1, 1]) {
-    const pillar = new THREE.Mesh(new THREE.BoxGeometry(0.085, 0.74, 0.09), alcantaraMat);
-    pillar.position.set(side * 0.70, 1.12, -0.46);
-    pillar.rotation.z = side * 0.22;
-    pillar.rotation.x = 0.54;
-    cockpitGroup.add(pillar);
-
-    // Side air vents
-    const vent = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.055, 0.04, 14), chromeMat);
-    vent.rotation.x = Math.PI / 2;
-    vent.position.set(side * 0.56, 0.83, -0.27);
-    cockpitGroup.add(vent);
-
-    // Door upper shoulder sills
-    const sill = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.22, 0.95), paintMat);
-    sill.position.set(side * 0.78, 0.78, -0.12);
-    cockpitGroup.add(sill);
-  }
-
-  // Top roof visor header
-  const roofHeader = new THREE.Mesh(new THREE.BoxGeometry(1.42, 0.11, 0.26), alcantaraMat);
-  roofHeader.position.set(0, 1.40, -0.22);
-  cockpitGroup.add(roofHeader);
-
-  // Interior Rearview Mirror
-  const mirrorStem = new THREE.Mesh(new THREE.BoxGeometry(0.028, 0.09, 0.028), carbonMat);
-  mirrorStem.position.set(0, 1.33, -0.29);
-  cockpitGroup.add(mirrorStem);
-
-  const mirrorBody = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.08, 0.035), carbonMat);
-  mirrorBody.position.set(0, 1.27, -0.29);
-  cockpitGroup.add(mirrorBody);
-
-  const mirrorGlass = new THREE.Mesh(
-    new THREE.PlaneGeometry(0.25, 0.06),
-    new THREE.MeshStandardMaterial({ color: 0x38bdf8, metalness: 0.95, roughness: 0.08 }),
-  );
-  mirrorGlass.position.set(0, 1.27, -0.27);
-  cockpitGroup.add(mirrorGlass);
-
-  // Steering Column + Interactive 3D GT Racing Steering Wheel
-  const column = new THREE.Mesh(new THREE.CylinderGeometry(0.042, 0.05, 0.26, 12), carbonMat);
-  column.rotation.x = Math.PI / 2 - 0.24;
-  column.position.set(0, 0.79, -0.34);
-  cockpitGroup.add(column);
-
-  const steeringWheelGroup = new THREE.Group();
-  steeringWheelGroup.position.set(0, 0.81, -0.22);
-  steeringWheelGroup.rotation.x = -0.22;
-
-  // Steering wheel rim (torus)
-  const rim = new THREE.Mesh(new THREE.TorusGeometry(0.185, 0.021, 12, 36), alcantaraMat);
-  steeringWheelGroup.add(rim);
-
-  // Top 12 o'clock racing red centering band
-  const topBand = new THREE.Mesh(new THREE.TorusGeometry(0.185, 0.023, 10, 10, 0.24), trimRedMat);
-  topBand.rotation.z = Math.PI / 2 - 0.12;
-  steeringWheelGroup.add(topBand);
-
-  // Center carbon hub + aluminum 3-spoke plate
-  const hub = new THREE.Mesh(new THREE.CylinderGeometry(0.058, 0.062, 0.035, 16), carbonMat);
-  hub.rotation.x = Math.PI / 2;
-  steeringWheelGroup.add(hub);
-
-  const hubRing = new THREE.Mesh(new THREE.TorusGeometry(0.042, 0.005, 8, 20), trimRedMat);
-  hubRing.position.z = 0.018;
-  steeringWheelGroup.add(hubRing);
-
-  // Left, Right & Bottom spokes
-  const hSpoke = new THREE.Mesh(new THREE.BoxGeometry(0.35, 0.036, 0.018), chromeMat);
-  steeringWheelGroup.add(hSpoke);
-
-  const bSpoke = new THREE.Mesh(new THREE.BoxGeometry(0.042, 0.17, 0.018), chromeMat);
-  bSpoke.position.y = -0.095;
-  steeringWheelGroup.add(bSpoke);
-
-  // Paddle shifters behind spokes
-  for (const side of [-1, 1]) {
-    const paddle = new THREE.Mesh(new THREE.BoxGeometry(0.045, 0.095, 0.01), chromeMat);
-    paddle.position.set(side * 0.12, 0.02, -0.035);
-    steeringWheelGroup.add(paddle);
-  }
-
-  // 9 Live RPM Shift-Light LEDs across upper rim
-  const shiftLeds: THREE.MeshStandardMaterial[] = [];
-  const ledGeo = new THREE.SphereGeometry(0.009, 8, 8);
-  for (let i = 0; i < 9; i++) {
-    const angle = Math.PI / 2 + (4 - i) * 0.11;
-    const ledColor = i < 3 ? 0x22c55e : i < 6 ? 0xf59e0b : 0xef4444;
-    const ledMat = new THREE.MeshStandardMaterial({
-      color: 0x1e293b,
-      emissive: ledColor,
-      emissiveIntensity: 0,
-      roughness: 0.25,
-    });
-    const led = new THREE.Mesh(ledGeo, ledMat);
-    led.position.set(Math.cos(angle) * 0.165, Math.sin(angle) * 0.165, 0.02);
-    steeringWheelGroup.add(led);
-    shiftLeds.push(ledMat);
-  }
-
-  cockpitGroup.add(steeringWheelGroup);
-
-  return { cockpitGroup, steeringWheelGroup, shiftLeds };
 }

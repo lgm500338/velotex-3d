@@ -8,7 +8,6 @@ import { RacingEngine } from './engine/RacingEngine';
 import { TRANSLATIONS } from './i18n/translations';
 import {
   CalloutEvent,
-  CameraMode,
   GamePhase,
   HudTelemetry,
   Language,
@@ -60,7 +59,6 @@ export default function App() {
 
   const [language, setLanguage] = useState<Language>('ko');
   const [selectedRace, setSelectedRace] = useState<RaceConfig>(RACES[0]);
-  const [cameraMode, setCameraMode] = useState<CameraMode>('chase');
   const [liveryId, setLiveryId] = useState<string>(CAR_LIVERIES[0].id);
   const [autoGas, setAutoGas] = useState<boolean>(true);
   const [muted, setMuted] = useState<boolean>(false);
@@ -121,14 +119,7 @@ export default function App() {
     engineRef.current = engine;
     engine.init();
 
-    const handleCameraSync = (e: Event) => {
-      const mode = (e as CustomEvent<CameraMode>).detail;
-      if (mode) setCameraMode(mode);
-    };
-    window.addEventListener('velotex-camera-sync', handleCameraSync);
-
     return () => {
-      window.removeEventListener('velotex-camera-sync', handleCameraSync);
       if (calloutTimerRef.current) window.clearTimeout(calloutTimerRef.current);
       engine.dispose();
       audio.dispose();
@@ -144,11 +135,6 @@ export default function App() {
   const handleSelectRace = useCallback((race: RaceConfig) => {
     setSelectedRace(race);
     engineRef.current?.loadRace(race, false);
-  }, []);
-
-  const handleSelectCamera = useCallback((mode: CameraMode) => {
-    setCameraMode(mode);
-    engineRef.current?.setCameraMode(mode);
   }, []);
 
   const handleSelectLivery = useCallback((id: string) => {
@@ -175,10 +161,9 @@ export default function App() {
 
   const handleStartRace = useCallback(() => {
     audioRef.current?.init();
-    engineRef.current?.setCameraMode(cameraMode);
     engineRef.current?.setAutoGas(autoGas);
     engineRef.current?.startCountdown();
-  }, [cameraMode, autoGas]);
+  }, [autoGas]);
 
   const handleRestart = useCallback(() => {
     audioRef.current?.init();
@@ -234,8 +219,6 @@ export default function App() {
           onToggleLanguage={handleToggleLanguage}
           selectedRace={selectedRace}
           onSelectRace={handleSelectRace}
-          cameraMode={cameraMode}
-          onSelectCamera={handleSelectCamera}
           liveryId={liveryId}
           onSelectLivery={handleSelectLivery}
           autoGas={autoGas}
@@ -255,8 +238,6 @@ export default function App() {
           race={selectedRace}
           phase={phase}
           hud={hud}
-          cameraMode={cameraMode}
-          onSelectCamera={handleSelectCamera}
           autoGas={autoGas}
           onToggleAutoGas={handleToggleAutoGas}
           muted={muted}
