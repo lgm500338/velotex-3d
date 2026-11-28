@@ -184,6 +184,10 @@ export function RaceMenu({
             <Flag className="h-3.5 w-3.5 text-sky-400 shrink-0" />
             <span>{t.controlsHintDesktop}</span>
           </div>
+
+          <p className="mt-3 border-t border-white/8 pt-2.5 text-[10px] leading-relaxed text-slate-500">
+            {t.carModelCredits}
+          </p>
         </section>
       ) : (
         /* Launch dock: the car stays fully visible above this */
