@@ -61,14 +61,17 @@ export function preloadCarModels(ids: CarModelId[]): void {
 
 /**
  * Swaps the procedural body of a rig for a realistic glTF car.
- * The procedural car stays visible if the model can't be loaded.
+ * The procedural car is hidden while the model loads and shown again only if loading fails.
  */
 export async function applyCarModel(rig: SupercarRig, id: CarModelId): Promise<boolean> {
+  // Hide the built-in box car straight away so it never flashes on screen while the model downloads
+  for (const part of rig.proceduralParts) part.visible = false;
   let source: THREE.Object3D;
   try {
     source = await loadModel(id);
   } catch (err) {
-    console.warn(`[VELOTEX] car model "${id}" failed to load, keeping the built-in car`, err);
+    console.warn(`[VELOTEX] car model "${id}" failed to load, showing the built-in car instead`, err);
+    if (!rig.disposed) for (const part of rig.proceduralParts) part.visible = true;
     return false;
   }
   if (rig.disposed) return false;
@@ -91,7 +94,6 @@ export async function applyCarModel(rig: SupercarRig, id: CarModelId): Promise<b
   holder.rotation.y = Math.PI;
   holder.add(model);
 
-  for (const part of rig.proceduralParts) part.visible = false;
   rig.group.add(holder);
   rig.group.updateMatrixWorld(true);
 
