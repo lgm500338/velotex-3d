@@ -12,17 +12,31 @@ import type { SupercarRig } from './CarBuilder';
  */
 export type CarModelId = 'goblin' | 'concept-050' | 'sport-coupe' | 'aurora-gt';
 
-const MODEL_FILES: Record<CarModelId, string> = {
-  goblin: 'models/cars/goblin.glb',
-  'concept-050': 'models/cars/concept-050.glb',
-  'sport-coupe': 'models/cars/sport-coupe.glb',
-  'aurora-gt': 'models/cars/aurora-gt.glb',
+interface CarModelSpec {
+  file: string;
+  /**
+   * Some models paint the body through a texture atlas that also holds lights, grilles and number plates.
+   * Texels close to this sRGB colour are body paint and take the racer's livery colour; every other texel
+   * keeps its own colour, so those details don't all turn into one flat colour.
+   */
+  paintKey?: { color: [number, number, number]; tolerance: number };
+}
+
+const MODELS: Record<CarModelId, CarModelSpec> = {
+  goblin: { file: 'models/cars/goblin.glb', paintKey: { color: [0, 0, 0], tolerance: 0.07 } },
+  'concept-050': { file: 'models/cars/concept-050.glb' },
+  'sport-coupe': {
+    file: 'models/cars/sport-coupe.glb',
+    paintKey: { color: [136 / 255, 20 / 255, 20 / 255], tolerance: 0.16 },
+  },
+  'aurora-gt': { file: 'models/cars/aurora-gt.glb' },
 };
 
 /** Length the procedural car is built at, so collisions and camera still fit. */
 const TARGET_LENGTH_M = 4.45;
 
-const WHEEL_NAME = /^wheel\.(front|rear)\.(L|R)$/;
+// GLTFLoader strips dots from node names, so "wheel.front.L" arrives as "wheelfrontL"
+const WHEEL_NAME = /^wheel\.?(front|rear)\.?(L|R)$/;
 
 let loader: GLTFLoader | null = null;
 const cache = new Map<CarModelId, Promise<THREE.Object3D>>();
@@ -34,7 +48,7 @@ function loadModel(id: CarModelId): Promise<THREE.Object3D> {
       loader = new GLTFLoader();
       loader.setMeshoptDecoder(MeshoptDecoder);
     }
-    const url = `${import.meta.env.BASE_URL}${MODEL_FILES[id]}`;
+    const url = `${import.meta.env.BASE_URL}${MODELS[id].file}`;
     pending = loader.loadAsync(url).then((gltf) => {
       gltf.scene.traverse((obj) => {
         obj.userData.sharedCarAsset = true;
@@ -78,13 +92,25 @@ export async function applyCarModel(rig: SupercarRig, id: CarModelId): Promise<b
 
   const model = source.clone(true);
 
-  // Per-car paint so each racer keeps its own colour (and the menu livery picker keeps working)
-  rig.paintMaterial.side = THREE.DoubleSide;
+  // Per-car paint so each racer keeps its own colour (and the menu livery picker keeps working).
+  // Wheels keep their own materials even where a model shares the paint material with its rims.
+  const insideWheel = new Set<THREE.Object3D>();
   model.traverse((obj) => {
-    if (obj instanceof THREE.Mesh && !Array.isArray(obj.material) && obj.material.name === 'paint') {
+    if (WHEEL_NAME.test(obj.name)) obj.traverse((child) => insideWheel.add(child));
+  });
+  let paintSource: THREE.MeshStandardMaterial | null = null;
+  model.traverse((obj) => {
+    if (
+      obj instanceof THREE.Mesh &&
+      !insideWheel.has(obj) &&
+      !Array.isArray(obj.material) &&
+      obj.material.name === 'paint'
+    ) {
+      paintSource = obj.material as THREE.MeshStandardMaterial;
       obj.material = rig.paintMaterial;
     }
   });
+  if (paintSource) setupPaint(rig.paintMaterial, paintSource, MODELS[id]);
 
   // Scale to the game's car length and turn the front from +Z to the game's forward (-Z)
   const holder = new THREE.Group();
@@ -117,9 +143,58 @@ export async function applyCarModel(rig: SupercarRig, id: CarModelId): Promise<b
       pivot.updateMatrixWorld(true);
       spin.attach(node);
       rig.wheels.push(spin);
-      if (node.name.startsWith('wheel.front')) rig.frontSteerPivots.push(pivot);
+      if (/^wheel\.?front/.test(node.name)) rig.frontSteerPivots.push(pivot);
     }
   }
 
   return true;
+}
+
+/**
+ * Gives the rig's paint the model's own surface detail: ambient occlusion and normal maps, and,
+ * where the body is painted through a texture atlas, a mask so only the body takes the livery colour.
+ */
+function setupPaint(
+  paint: THREE.MeshPhysicalMaterial,
+  source: THREE.MeshStandardMaterial,
+  spec: CarModelSpec,
+): void {
+  paint.side = THREE.DoubleSide;
+  paint.aoMap = source.aoMap;
+  paint.aoMapIntensity = source.aoMap ? 1 : paint.aoMapIntensity;
+  paint.normalMap = source.normalMap;
+  if (source.normalMap) paint.normalScale.copy(source.normalScale);
+
+  const key = spec.paintKey;
+  if (!key || !source.map) return;
+  paint.map = source.map;
+  const uniforms = {
+    paintKey: { value: new THREE.Vector3(...key.color) },
+    paintTolerance: { value: key.tolerance },
+  };
+  paint.onBeforeCompile = (shader) => {
+    Object.assign(shader.uniforms, uniforms);
+    shader.fragmentShader = shader.fragmentShader
+      .replace(
+        'void main() {',
+        'uniform vec3 paintKey;\nuniform float paintTolerance;\nfloat paintMask = 1.0;\nvoid main() {',
+      )
+      .replace(
+        '#include <map_fragment>',
+        `#ifdef USE_MAP
+          vec4 paintTexel = texture2D( map, vMapUv );
+          vec3 paintTexelSrgb = pow( max( paintTexel.rgb, vec3( 0.0 ) ), vec3( 1.0 / 2.2 ) );
+          paintMask = 1.0 - smoothstep( paintTolerance, paintTolerance * 1.8, distance( paintTexelSrgb, paintKey ) );
+          diffuseColor.rgb = mix( paintTexel.rgb, diffuseColor.rgb, paintMask );
+        #endif`,
+      )
+      .replace(
+        '#include <metalnessmap_fragment>',
+        `#include <metalnessmap_fragment>
+        metalnessFactor *= paintMask;
+        roughnessFactor = mix( 0.55, roughnessFactor, paintMask );`,
+      );
+  };
+  paint.customProgramCacheKey = () => `velotex-paint-${key.color.join(',')}-${key.tolerance}`;
+  paint.needsUpdate = true;
 }
