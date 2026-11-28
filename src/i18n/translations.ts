@@ -40,6 +40,7 @@ export interface Translations {
   controlsHintTouch: string;
   raceSettings: string;
   closeSettings: string;
+  carModelCredits: string;
   hideControls: string;
   showControls: string;
   calloutDraft: string;
@@ -98,6 +99,7 @@ export const TRANSLATIONS: Record<Language, Translations> = {
     controlsHintDesktop: 'A/D · ←/→ 조향  ·  W/↑ 가속  ·  S/↓ 브레이크  ·  Space 니트로',
     raceSettings: '레이스 · 설정',
     closeSettings: '닫기',
+    carModelCredits: "3D 자동차 모델: ollitei의 \"Fictional supercar - V12 Goblin\", MMC Works의 \"Generic Sport Coupé Car\", Eric Chadwick / Darmstadt Graphics Group의 \"Car Concept\" (모두 CC BY 4.0, 수정함), Unity Fan의 \"Concept Car 050\" (CC0). 자세한 내용: CREDITS.md",
     controlsHintTouch: '화면을 누른 채 좌우 드래그하여 조향 · 우측 NOS 버튼으로 부스트',
     hideControls: '컨트롤 숨기기',
     showControls: '컨트롤 보기',
@@ -155,6 +157,7 @@ export const TRANSLATIONS: Record<Language, Translations> = {
     controlsHintDesktop: 'A/D or Arrows to Steer  ·  W/Up Gas  ·  S/Down Brake  ·  Space Nitro',
     raceSettings: 'Race & Settings',
     closeSettings: 'Close',
+    carModelCredits: "3D car models: \"Fictional supercar - V12 Goblin\" by ollitei, \"Generic Sport Coupé Car\" by MMC Works, \"Car Concept\" by Eric Chadwick / Darmstadt Graphics Group (all CC BY 4.0, modified), \"Concept Car 050\" by Unity Fan (CC0). Details: CREDITS.md",
     controlsHintTouch: 'Hold & drag left/right to steer · Tap NOS button to boost',
     hideControls: 'Hide Dock',
     showControls: 'Show Dock',
