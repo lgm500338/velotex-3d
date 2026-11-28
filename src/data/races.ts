@@ -1,3 +1,4 @@
+import type { CarModelId } from '../engine/CarModels';
 import { CarLivery, RaceConfig } from '../types/game';
 
 export const CAR_LIVERIES: CarLivery[] = [
@@ -48,12 +49,22 @@ export const CAR_LIVERIES: CarLivery[] = [
   },
 ];
 
-export const RIVAL_PROFILES = [
-  { id: 'rival-1', name: 'K. VANCE', colorHex: 0xf59e0b, cssColor: '#F59E0B', skill: 0.99 },
-  { id: 'rival-2', name: 'S. PARK', colorHex: 0x1a1e29, cssColor: '#334155', skill: 0.96 },
-  { id: 'rival-3', name: 'M. ROSSI', colorHex: 0xe11d48, cssColor: '#E11D48', skill: 0.93 },
-  { id: 'rival-4', name: 'L. CHEN', colorHex: 0x10b981, cssColor: '#10B981', skill: 0.90 },
-  { id: 'rival-5', name: 'A. SATO', colorHex: 0xe2e8f0, cssColor: '#CBD5E1', skill: 0.87 },
+/** The player's car body (realistic glTF model, see src/engine/CarModels.ts). */
+export const PLAYER_CAR_MODEL: CarModelId = 'goblin';
+
+export const RIVAL_PROFILES: {
+  id: string;
+  name: string;
+  colorHex: number;
+  cssColor: string;
+  skill: number;
+  model: CarModelId;
+}[] = [
+  { id: 'rival-1', name: 'K. VANCE', colorHex: 0xf59e0b, cssColor: '#F59E0B', skill: 0.99, model: 'concept-050' },
+  { id: 'rival-2', name: 'S. PARK', colorHex: 0x1a1e29, cssColor: '#334155', skill: 0.96, model: 'sport-coupe' },
+  { id: 'rival-3', name: 'M. ROSSI', colorHex: 0xe11d48, cssColor: '#E11D48', skill: 0.93, model: 'aurora-gt' },
+  { id: 'rival-4', name: 'L. CHEN', colorHex: 0x10b981, cssColor: '#10B981', skill: 0.90, model: 'goblin' },
+  { id: 'rival-5', name: 'A. SATO', colorHex: 0xe2e8f0, cssColor: '#CBD5E1', skill: 0.87, model: 'concept-050' },
 ];
 
 export const RACES: RaceConfig[] = [

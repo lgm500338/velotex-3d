@@ -1,6 +1,9 @@
 export type Language = 'ko' | 'en';
 
 
+/** 'tunnel' = original bright patterned tracks, 'nature' = real-photo backgrounds that keep changing. */
+export type SceneryMode = 'tunnel' | 'nature';
+
 export type GamePhase = 'menu' | 'countdown' | 'racing' | 'paused' | 'finished';
 
 export type TrackThemeId =

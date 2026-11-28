@@ -13,6 +13,7 @@ import {
   Language,
   RaceConfig,
   RaceRecord,
+  SceneryMode,
 } from './types/game';
 
 const RECORDS_STORAGE_KEY = 'velotex_3d_records_v1';
@@ -40,6 +41,16 @@ const INITIAL_HUD: HudTelemetry = {
   nearMissCount: 0,
 };
 
+const SCENERY_STORAGE_KEY = 'velotex3d_scenery';
+
+function loadScenery(): SceneryMode {
+  try {
+    return localStorage.getItem(SCENERY_STORAGE_KEY) === 'nature' ? 'nature' : 'tunnel';
+  } catch {
+    return 'tunnel';
+  }
+}
+
 function loadRecords(): Record<number, RaceRecord> {
   try {
     const raw = localStorage.getItem(RECORDS_STORAGE_KEY);
@@ -61,6 +72,8 @@ export default function App() {
   const [selectedRace, setSelectedRace] = useState<RaceConfig>(RACES[0]);
   const [liveryId, setLiveryId] = useState<string>(CAR_LIVERIES[0].id);
   const [autoGas, setAutoGas] = useState<boolean>(true);
+  const [scenery, setScenery] = useState<SceneryMode>(() => loadScenery());
+  const sceneryRef = useRef<SceneryMode>(scenery);
   const [muted, setMuted] = useState<boolean>(false);
   const [phase, setPhase] = useState<GamePhase>('menu');
   const [hud, setHud] = useState<HudTelemetry>(INITIAL_HUD);
@@ -117,6 +130,7 @@ export default function App() {
     });
 
     engineRef.current = engine;
+    engine.setSceneryMode(sceneryRef.current);
     engine.init();
 
     return () => {
@@ -148,6 +162,17 @@ export default function App() {
       engineRef.current?.setAutoGas(next);
       return next;
     });
+  }, []);
+
+  const handleSelectScenery = useCallback((mode: SceneryMode) => {
+    sceneryRef.current = mode;
+    setScenery(mode);
+    engineRef.current?.setSceneryMode(mode);
+    try {
+      localStorage.setItem(SCENERY_STORAGE_KEY, mode);
+    } catch {
+      /* private mode: just don't remember */
+    }
   }, []);
 
   const handleToggleMuted = useCallback(() => {
@@ -223,6 +248,8 @@ export default function App() {
           onSelectLivery={handleSelectLivery}
           autoGas={autoGas}
           onToggleAutoGas={handleToggleAutoGas}
+          scenery={scenery}
+          onSelectScenery={handleSelectScenery}
           muted={muted}
           onToggleMuted={handleToggleMuted}
           records={records}

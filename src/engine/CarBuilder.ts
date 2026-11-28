@@ -9,6 +9,10 @@ export interface SupercarRig {
   nitroFlames: THREE.Mesh[];
   paintMaterial: THREE.MeshPhysicalMaterial;
   accentMaterial: THREE.MeshPhysicalMaterial;
+  /** Built-in body parts, hidden when a realistic glTF model is swapped in (see CarModels.ts). */
+  proceduralParts: THREE.Object3D[];
+  /** Set when the race is torn down, so a late model load doesn't touch a removed car. */
+  disposed: boolean;
 }
 
 /**
@@ -333,6 +337,10 @@ export function buildSupercarRig(
     }
   }
 
+  const proceduralParts = group.children.filter(
+    (child) => child !== shadowMesh && !nitroFlames.includes(child as THREE.Mesh),
+  );
+
   return {
     group,
     exteriorCabinGroup,
@@ -342,5 +350,7 @@ export function buildSupercarRig(
     nitroFlames,
     paintMaterial,
     accentMaterial,
+    proceduralParts,
+    disposed: false,
   };
 }

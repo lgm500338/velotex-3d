@@ -4,7 +4,9 @@ import {
   Flag,
   Gauge,
   Globe,
+  Mountain,
   Play,
+  Sparkles,
   SlidersHorizontal,
   Volume2,
   VolumeX,
@@ -12,7 +14,7 @@ import {
 } from 'lucide-react';
 import { CAR_LIVERIES, RACES } from '../data/races';
 import { TRANSLATIONS } from '../i18n/translations';
-import { Language, RaceConfig, RaceRecord } from '../types/game';
+import { Language, RaceConfig, RaceRecord, SceneryMode } from '../types/game';
 
 interface RaceMenuProps {
   language: Language;
@@ -23,6 +25,8 @@ interface RaceMenuProps {
   onSelectLivery: (id: string) => void;
   autoGas: boolean;
   onToggleAutoGas: () => void;
+  scenery: SceneryMode;
+  onSelectScenery: (mode: SceneryMode) => void;
   muted: boolean;
   onToggleMuted: () => void;
   records: Record<number, RaceRecord>;
@@ -49,6 +53,8 @@ export function RaceMenu({
   onSelectLivery,
   autoGas,
   onToggleAutoGas,
+  scenery,
+  onSelectScenery,
   muted,
   onToggleMuted,
   records,
@@ -184,6 +190,10 @@ export function RaceMenu({
             <Flag className="h-3.5 w-3.5 text-sky-400 shrink-0" />
             <span>{t.controlsHintDesktop}</span>
           </div>
+
+          <p className="mt-3 border-t border-white/8 pt-2.5 text-[10px] leading-relaxed text-slate-500">
+            {t.carModelCredits}
+          </p>
         </section>
       ) : (
         /* Launch dock: the car stays fully visible above this */
@@ -207,6 +217,37 @@ export function RaceMenu({
                     }`}
                     style={{ backgroundColor: liv.cssColor }}
                   />
+                );
+              })}
+            </div>
+
+            {/* Scenery: original tunnel tracks vs. real-photo backgrounds */}
+            <div
+              role="radiogroup"
+              aria-label={t.sceneryLabel}
+              className="mx-auto flex w-full max-w-xs items-center gap-1 rounded-xl border border-white/12 bg-[#070b14]/80 p-1 backdrop-blur-sm"
+            >
+              {(
+                [
+                  ['tunnel', t.sceneryTunnel, Sparkles],
+                  ['nature', t.sceneryNature, Mountain],
+                ] as const
+              ).map(([mode, label, Icon]) => {
+                const on = scenery === mode;
+                return (
+                  <button
+                    key={mode}
+                    type="button"
+                    role="radio"
+                    aria-checked={on}
+                    onClick={() => onSelectScenery(mode)}
+                    className={`flex flex-1 items-center justify-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-bold whitespace-nowrap transition-colors cursor-pointer ${
+                      on ? 'bg-sky-500 text-slate-950' : 'text-slate-300 hover:bg-white/10 hover:text-white'
+                    }`}
+                  >
+                    <Icon className="h-3.5 w-3.5" />
+                    <span>{label}</span>
+                  </button>
                 );
               })}
             </div>
