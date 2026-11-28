@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
-import { CAR_LIVERIES, RACES, RIVAL_PROFILES } from '../data/races';
+import { CAR_LIVERIES, PLAYER_CAR_MODEL, RACES, RIVAL_PROFILES } from '../data/races';
 import {
   CalloutEvent,
   GamePhase,
@@ -13,6 +13,7 @@ import {
 import { AudioEngine } from './AudioEngine';
 import { buildSupercarRig, SupercarRig } from './CarBuilder';
 import { NatureBackdrop } from './NatureBackdrop';
+import { applyCarModel, preloadCarModels } from './CarModels';
 import { createContactShadowTexture } from './ProceduralTextures';
 import { buildTrackWorld, BuiltTrack, TrackFrame } from './TrackSystem';
 
@@ -170,6 +171,8 @@ export class RacingEngine {
       typeof window !== 'undefined' &&
       typeof window.matchMedia === 'function' &&
       window.matchMedia('(pointer: coarse)').matches;
+    // Without a real GPU the detailed models would make the game too slow, so keep the built-in cars there
+    if (!this.isSoftwareGl) preloadCarModels([PLAYER_CAR_MODEL, ...RIVAL_PROFILES.map((p) => p.model)]);
   }
 
   public init(): boolean {
@@ -423,6 +426,7 @@ export class RacingEngine {
         isMobile: this.isCoarsePointer,
       });
       this.scene.add(rig.group);
+      if (!this.isSoftwareGl) void applyCarModel(rig, profile.model);
       const [sPos, latPos] = gridSlots[idx];
       const racer: RacerState = {
         id: profile.id,
@@ -453,6 +457,7 @@ export class RacingEngine {
       isMobile: this.isCoarsePointer,
     });
     this.scene.add(playerRig.group);
+    if (!this.isSoftwareGl) void applyCarModel(playerRig, PLAYER_CAR_MODEL);
 
     const [pS, pLat] = gridSlots[5];
     this.playerRacer = {
@@ -508,11 +513,15 @@ export class RacingEngine {
   }
 
   private disposeCarRig(rig: SupercarRig): void {
+    rig.disposed = true;
     const disposedGeos = new Set<THREE.BufferGeometry>();
     const disposedMats = new Set<THREE.Material>();
+    // The paint is per car even on loaded models; everything else in a loaded model is shared between races
+    disposedMats.add(rig.paintMaterial);
+    rig.paintMaterial.dispose();
 
     rig.group.traverse((obj) => {
-      if (obj instanceof THREE.Mesh) {
+      if (obj instanceof THREE.Mesh && !obj.userData.sharedCarAsset) {
         if (obj.geometry && !disposedGeos.has(obj.geometry)) {
           disposedGeos.add(obj.geometry);
           obj.geometry.dispose();
