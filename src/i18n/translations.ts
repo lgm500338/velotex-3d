@@ -14,6 +14,9 @@ export interface Translations {
   soundOff: string;
   autoGasOn: string;
   autoGasOff: string;
+  sceneryLabel: string;
+  sceneryTunnel: string;
+  sceneryNature: string;
   throttleLabel: string;
   brakeLabel: string;
   posLabel: string;
@@ -73,6 +76,9 @@ export const TRANSLATIONS: Record<Language, Translations> = {
     soundOff: '음소거',
     autoGasOn: '자동 가속',
     autoGasOff: '수동 가속',
+    sceneryLabel: '배경',
+    sceneryTunnel: '터널',
+    sceneryNature: '자연 실사',
     throttleLabel: '가속 방식',
     brakeLabel: '브레이크',
     posLabel: '순위',
@@ -130,6 +136,9 @@ export const TRANSLATIONS: Record<Language, Translations> = {
     soundOff: 'Muted',
     autoGasOn: 'Auto Gas',
     autoGasOff: 'Manual Gas',
+    sceneryLabel: 'Scenery',
+    sceneryTunnel: 'Tunnel',
+    sceneryNature: 'Real World',
     throttleLabel: 'Throttle',
     brakeLabel: 'BRAKE',
     posLabel: 'POS',

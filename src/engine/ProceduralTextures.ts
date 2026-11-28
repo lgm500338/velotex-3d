@@ -169,6 +169,90 @@ export function createRoadTexture(theme: TrackThemeId, anisotropy: number, repea
   return configureTexture(new THREE.CanvasTexture(canvas), anisotropy, 1, repeatY);
 }
 
+/**
+ * Realistic grey highway asphalt for the photo-background mode: fine aggregate
+ * grain, faint tyre-worn lanes, solid white edge lines and dashed lane lines.
+ * One texture tile covers ~24 m of road.
+ */
+export function createHighwayRoadTexture(anisotropy: number, repeatY: number): THREE.CanvasTexture {
+  const W = 512;
+  const H = 1024;
+  const canvas = document.createElement('canvas');
+  canvas.width = W;
+  canvas.height = H;
+  const ctx = canvas.getContext('2d')!;
+
+  // Per-pixel asphalt grain (deterministic so every load looks the same)
+  let seed = 1337;
+  const rand = () => {
+    seed = (seed * 1664525 + 1013904223) >>> 0;
+    return seed / 4294967296;
+  };
+  const img = ctx.createImageData(W, H);
+  const d = img.data;
+  for (let y = 0; y < H; y++) {
+    for (let x = 0; x < W; x++) {
+      const i = (y * W + x) * 4;
+      let v = 70 + (rand() - 0.5) * 26;
+      const r = rand();
+      if (r < 0.025) v += 38 * rand(); // light stone chips
+      else if (r < 0.05) v -= 22 * rand(); // dark pits
+      d[i] = v;
+      d[i + 1] = v + 1;
+      d[i + 2] = v + 4;
+      d[i + 3] = 255;
+    }
+  }
+  ctx.putImageData(img, 0, 0);
+
+  // Large soft patches so the surface isn't uniformly flat
+  for (let k = 0; k < 26; k++) {
+    const x = rand() * W;
+    const y = rand() * H;
+    const rad = 40 + rand() * 120;
+    const g = ctx.createRadialGradient(x, y, 0, x, y, rad);
+    const dark = rand() < 0.5;
+    g.addColorStop(0, dark ? 'rgba(0,0,0,0.10)' : 'rgba(255,255,255,0.05)');
+    g.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = g;
+    ctx.fillRect(x - rad, y - rad, rad * 2, rad * 2);
+  }
+
+  // Tyre-polished darker wheel paths in each of the three lanes
+  ctx.fillStyle = 'rgba(15, 16, 20, 0.16)';
+  for (const lane of [0.2, 0.5, 0.8]) {
+    for (const off of [-0.07, 0.07]) {
+      ctx.fillRect((lane + off) * W - 14, 0, 28, H);
+    }
+  }
+
+  // Worn paint: draw a line, then knock random specks out of it
+  const paint = (x: number, y: number, w: number, h: number) => {
+    ctx.fillStyle = 'rgba(236, 238, 240, 0.92)';
+    ctx.fillRect(x, y, w, h);
+    ctx.fillStyle = 'rgba(70, 72, 76, 0.45)';
+    for (let k = 0; k < (w * h) / 40; k++) {
+      ctx.fillRect(x + rand() * w, y + rand() * h, 2, 2);
+    }
+  };
+
+  // Solid edge lines
+  paint(W * 0.035, 0, 12, H);
+  paint(W * 0.965 - 12, 0, 12, H);
+
+  // Dashed lane dividers (one dash per tile)
+  for (const lx of [1 / 3, 2 / 3]) {
+    paint(lx * W - 5, H * 0.1, 10, H * 0.36);
+  }
+
+  // Darker shoulder strip outside the edge lines
+  ctx.fillStyle = 'rgba(20, 20, 24, 0.25)';
+  ctx.fillRect(0, 0, W * 0.035, H);
+  ctx.fillRect(W * 0.965, 0, W * 0.035, H);
+
+  return configureTexture(new THREE.CanvasTexture(canvas), anisotropy, 1, repeatY);
+}
+
 export function createTunnelTexture(theme: TrackThemeId, anisotropy: number, repeatY: number): THREE.CanvasTexture {
   const canvas = document.createElement('canvas');
   canvas.width = 512;

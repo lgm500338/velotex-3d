@@ -1,9 +1,10 @@
 import * as THREE from 'three';
-import { RaceConfig } from '../types/game';
+import { RaceConfig, SceneryMode } from '../types/game';
 import {
   createBoostPadTexture,
   createBuildingFacadeTextures,
   createCheckeredTexture,
+  createHighwayRoadTexture,
   createMountainRockTexture,
   createRoadTexture,
   createTreeBarkTexture,
@@ -130,7 +131,14 @@ export interface BuiltTrack {
   dispose: () => void;
 }
 
-export function buildTrackWorld(config: RaceConfig, maxAnisotropy: number): BuiltTrack {
+export function buildTrackWorld(
+  config: RaceConfig,
+  maxAnisotropy: number,
+  scenery: SceneryMode = 'tunnel',
+): BuiltTrack {
+  // 'nature' = real-photo 360° backdrops (drawn by NatureBackdrop) with a plain
+  // highway: no tunnels and no procedural scenery, so the photo stays visible.
+  const nature = scenery === 'nature';
   const group = new THREE.Group();
   const spline = new TrackSpline(config);
   const disposables: { dispose: () => void }[] = [];
@@ -146,7 +154,9 @@ export function buildTrackWorld(config: RaceConfig, maxAnisotropy: number): Buil
   const halfW = config.roadWidth * 0.5;
 
   // 1. Road Surface Ribbon + Side Curbs + Under-deck (Custom indexed BufferGeometry)
-  const roadTex = createRoadTexture(config.theme, maxAnisotropy, totalS / 15);
+  const roadTex = nature
+    ? createHighwayRoadTexture(maxAnisotropy, totalS / 24)
+    : createRoadTexture(config.theme, maxAnisotropy, totalS / 15);
   disposables.push(roadTex);
 
   const roadPositions: number[] = [];
@@ -194,7 +204,7 @@ export function buildTrackWorld(config: RaceConfig, maxAnisotropy: number): Buil
     }
 
     // Raised curb barriers along both sides of road
-    const railH = config.theme === 'timber_valley' || config.theme === 'forest_canopy' ? 0.78 : 0.62;
+    const railH = nature ? 0.8 : config.theme === 'timber_valley' || config.theme === 'forest_canopy' ? 0.78 : 0.62;
     vRailOutL.copy(frame.pos).addScaledVector(frame.right, -(halfW + 0.15)).addScaledVector(frame.up, -0.35);
     vRailTopL.copy(frame.pos).addScaledVector(frame.right, -(halfW + 0.08)).addScaledVector(frame.up, railH);
     vRailOutR.copy(frame.pos).addScaledVector(frame.right, halfW + 0.15).addScaledVector(frame.up, -0.35);
@@ -230,11 +240,11 @@ export function buildTrackWorld(config: RaceConfig, maxAnisotropy: number): Buil
   roadGeo.setIndex(roadIndices);
   disposables.push(roadGeo);
 
-  const isNeonRoad = config.theme === 'neon_grid' || config.theme === 'cyber_tunnel';
+  const isNeonRoad = !nature && (config.theme === 'neon_grid' || config.theme === 'cyber_tunnel');
   const roadMat = new THREE.MeshStandardMaterial({
     map: roadTex,
-    roughness: isNeonRoad ? 0.38 : 0.72,
-    metalness: isNeonRoad ? 0.25 : 0.08,
+    roughness: isNeonRoad ? 0.38 : nature ? 0.88 : 0.72,
+    metalness: isNeonRoad ? 0.25 : nature ? 0.0 : 0.08,
     emissive: isNeonRoad ? new THREE.Color(config.theme === 'neon_grid' ? 0x260947 : 0x05183b) : new THREE.Color(0x000000),
     emissiveIntensity: isNeonRoad ? 0.55 : 0,
   });
@@ -250,8 +260,9 @@ export function buildTrackWorld(config: RaceConfig, maxAnisotropy: number): Buil
   railGeo.setIndex(railIndices);
   disposables.push(railGeo);
 
-  const railColor =
-    config.theme === 'forest_canopy' || config.theme === 'timber_valley'
+  const railColor = nature
+    ? 0xc4ccd4
+    : config.theme === 'forest_canopy' || config.theme === 'timber_valley'
       ? 0x92400e
       : config.theme === 'neon_grid'
         ? 0xd946ef
@@ -260,8 +271,8 @@ export function buildTrackWorld(config: RaceConfig, maxAnisotropy: number): Buil
           : 0x334155;
   const railMat = new THREE.MeshStandardMaterial({
     color: railColor,
-    roughness: isNeonRoad ? 0.3 : 0.75,
-    metalness: isNeonRoad ? 0.5 : 0.15,
+    roughness: isNeonRoad ? 0.3 : nature ? 0.42 : 0.75,
+    metalness: isNeonRoad ? 0.5 : nature ? 0.65 : 0.15,
     emissive: isNeonRoad ? new THREE.Color(railColor) : new THREE.Color(0x000000),
     emissiveIntensity: isNeonRoad ? 0.45 : 0,
     side: THREE.DoubleSide,
@@ -270,7 +281,7 @@ export function buildTrackWorld(config: RaceConfig, maxAnisotropy: number): Buil
   group.add(new THREE.Mesh(railGeo, railMat));
 
   // 2. Curved Tunnel Sections (for Cyber Tunnel, Neon Grid, and Sunset GP underpasses)
-  if (config.tunnelCoverage > 0) {
+  if (!nature && config.tunnelCoverage > 0) {
     const tunnelRanges: [number, number][] =
       config.theme === 'sunset_gp'
         ? [
@@ -290,7 +301,9 @@ export function buildTrackWorld(config: RaceConfig, maxAnisotropy: number): Buil
 
   // 3. Theme-specific Landscape & Instanced Environment Scenery
   // Keep glowing tunnel tracks (cyber_tunnel, neon_grid) in their original neon atmosphere!
-  if (config.theme === 'forest_canopy' || config.theme === 'timber_valley') {
+  if (nature) {
+    buildRoadsidePosts(group, spline, config, disposables);
+  } else if (config.theme === 'forest_canopy' || config.theme === 'timber_valley') {
     buildNatureMountainsAndForest(group, spline, config, maxAnisotropy, disposables);
   } else if (config.theme === 'sunset_gp') {
     buildCitySkylineScenery(group, spline, config, maxAnisotropy, disposables);
@@ -407,6 +420,65 @@ export function buildTrackWorld(config: RaceConfig, maxAnisotropy: number): Buil
     updateAnimations,
     dispose,
   };
+}
+
+/**
+ * Roadside reflector posts every few metres (like real highway delineators).
+ * They are the main thing that streams past the camera in photo mode, which is
+ * what sells the sense of speed. Two InstancedMeshes = two draw calls.
+ */
+function buildRoadsidePosts(
+  group: THREE.Group,
+  spline: TrackSpline,
+  config: RaceConfig,
+  disposables: { dispose: () => void }[],
+): void {
+  const spacing = 16;
+  const offset = config.roadWidth * 0.5 + 1.1;
+  const count = Math.ceil((config.lengthMeters + 140) / spacing) * 2;
+
+  const postGeo = new THREE.BoxGeometry(0.14, 1.1, 0.14);
+  postGeo.translate(0, 0.55, 0);
+  const postMat = new THREE.MeshStandardMaterial({ color: 0xf1f5f9, roughness: 0.6, metalness: 0.05 });
+  const capGeo = new THREE.BoxGeometry(0.15, 0.16, 0.15);
+  capGeo.translate(0, 0.92, 0);
+  const capMat = new THREE.MeshStandardMaterial({
+    color: 0xf59e0b,
+    emissive: new THREE.Color(0xf59e0b),
+    emissiveIntensity: 0.35,
+    roughness: 0.35,
+  });
+  disposables.push(postGeo, postMat, capGeo, capMat);
+
+  const posts = new THREE.InstancedMesh(postGeo, postMat, count);
+  const caps = new THREE.InstancedMesh(capGeo, capMat, count);
+  const frame: TrackFrame = {
+    pos: new THREE.Vector3(),
+    forward: new THREE.Vector3(),
+    right: new THREE.Vector3(),
+    up: new THREE.Vector3(),
+    bankAngle: 0,
+  };
+  const dummy = new THREE.Object3D();
+  const basis = new THREE.Matrix4();
+  let i = 0;
+  for (let s = -30; s < config.lengthMeters + 130 && i < count - 1; s += spacing) {
+    spline.getFrameAt(s, frame);
+    basis.makeBasis(frame.right, frame.up, frame.forward.clone().negate());
+    for (const side of [-1, 1]) {
+      dummy.position.copy(frame.pos).addScaledVector(frame.right, side * offset);
+      dummy.quaternion.setFromRotationMatrix(basis);
+      dummy.updateMatrix();
+      posts.setMatrixAt(i, dummy.matrix);
+      caps.setMatrixAt(i, dummy.matrix);
+      i++;
+    }
+  }
+  posts.count = i;
+  caps.count = i;
+  posts.instanceMatrix.needsUpdate = true;
+  caps.instanceMatrix.needsUpdate = true;
+  group.add(posts, caps);
 }
 
 function buildTunnelSegment(

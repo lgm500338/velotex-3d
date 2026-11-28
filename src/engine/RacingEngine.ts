@@ -8,9 +8,11 @@ import {
   RaceConfig,
   RacerStanding,
   RivalScreenMarker,
+  SceneryMode,
 } from '../types/game';
 import { AudioEngine } from './AudioEngine';
 import { buildSupercarRig, SupercarRig } from './CarBuilder';
+import { NatureBackdrop } from './NatureBackdrop';
 import { createContactShadowTexture } from './ProceduralTextures';
 import { buildTrackWorld, BuiltTrack, TrackFrame } from './TrackSystem';
 
@@ -102,6 +104,8 @@ export class RacingEngine {
   private shadowTexture!: THREE.CanvasTexture;
 
   private currentRace: RaceConfig = RACES[0];
+  private sceneryMode: SceneryMode = 'tunnel';
+  private natureBackdrop: NatureBackdrop | null = null;
   private currentLiveryId = CAR_LIVERIES[0].id;
   private builtTrack: BuiltTrack | null = null;
   private racers: RacerState[] = [];
@@ -233,6 +237,9 @@ export class RacingEngine {
 
       this.camera = new THREE.PerspectiveCamera(68, width / height, 0.12, 650);
 
+      this.natureBackdrop = new NatureBackdrop(import.meta.env.BASE_URL + 'backgrounds/');
+      this.scene.add(this.natureBackdrop.mesh);
+
       // Balanced 3-Point Warm/Cool Studio + Sunlight Rig
       this.hemiLight = new THREE.HemisphereLight(0x93c5fd, 0x1e293b, 0.85);
       this.scene.add(this.hemiLight);
@@ -346,8 +353,21 @@ export class RacingEngine {
     // Configure sky, fog, and theme-matched lighting
     this.scene.background = new THREE.Color(config.skyBottomHex);
     this.scene.fog = new THREE.FogExp2(config.fogHex, config.fogDensity);
+    const nature = this.sceneryMode === 'nature';
+    if (this.natureBackdrop) {
+      this.natureBackdrop.mesh.visible = nature;
+      if (nature) this.natureBackdrop.setRace(config.id);
+    }
 
-    if (config.theme === 'forest_canopy' || config.theme === 'timber_valley') {
+    if (nature) {
+      // Clear daylight to match the outdoor photos (colours refined per frame in updateNatureBackdrop)
+      this.scene.fog = new THREE.FogExp2(0xb4bcc4, 0.0021);
+      this.hemiLight.intensity = 1.05;
+      this.keyLight.intensity = 2.5;
+      this.rimLight.color.setHex(0xdbeafe);
+      this.rimLight.intensity = 0.45;
+      this.updateNatureBackdrop();
+    } else if (config.theme === 'forest_canopy' || config.theme === 'timber_valley') {
       this.hemiLight.color.setHex(0xdbeafe);
       this.hemiLight.groundColor.setHex(0x365314);
       this.hemiLight.intensity = 1.1;
@@ -382,7 +402,7 @@ export class RacingEngine {
     }
 
     const maxAniso = this.renderer.capabilities.getMaxAnisotropy();
-    this.builtTrack = buildTrackWorld(config, maxAniso);
+    this.builtTrack = buildTrackWorld(config, maxAniso, this.sceneryMode);
     this.scene.add(this.builtTrack.group);
 
     // Spawn 6-car starting grid (5 AI rivals ahead + Player in P6 just like the screenshots!)
@@ -528,6 +548,24 @@ export class RacingEngine {
     }
     this.callbacks.onPhaseChange(phase);
     this.pushHudTelemetry(true);
+  }
+
+  /** Switch between the original tunnel tracks and real-photo nature backgrounds. */
+  public setSceneryMode(mode: SceneryMode): void {
+    if (mode === this.sceneryMode) return;
+    this.sceneryMode = mode;
+    if (this.scene) this.loadRace(this.currentRace, false);
+  }
+
+  private updateNatureBackdrop(): void {
+    const bd = this.natureBackdrop;
+    if (!bd || this.sceneryMode !== 'nature') return;
+    const dist = this.playerRacer && this.phase !== 'menu' ? this.playerRacer.s : 0;
+    bd.update(this.camera.position, dist);
+    (this.scene.fog as THREE.FogExp2).color.copy(bd.fogColor);
+    this.hemiLight.color.copy(bd.skyColor);
+    this.hemiLight.groundColor.copy(bd.groundColor);
+    this.keyLight.color.copy(bd.sunColor);
   }
 
   public setAutoGas(enabled: boolean): void {
@@ -705,6 +743,7 @@ export class RacingEngine {
     }
 
     this.updateParticles(dt);
+    this.updateNatureBackdrop();
     this.renderer.render(this.scene, this.camera);
 
     if (now - this.lastHudPushTime > 55) {
@@ -1477,6 +1516,7 @@ export class RacingEngine {
     this.smokeGeo?.dispose();
     this.smokeMat?.dispose();
     this.envRenderTarget?.dispose();
+    this.natureBackdrop?.dispose();
     this.renderer?.dispose();
   }
 }
